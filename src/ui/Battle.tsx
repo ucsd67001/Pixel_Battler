@@ -11,6 +11,8 @@ import { StageView } from './StageView';
 import { Term } from './Term';
 import { elementTip, GLOSSARY } from '../game/glossary';
 import { playBgm, sfx, stopBgm } from '../lib/sfx';
+import { mulberry32 } from '../game/random';
+import type { NetBattle } from '../net/room';
 
 interface SideHud {
   hp: number;
@@ -124,13 +126,24 @@ export function Battle({
   player,
   onExit,
   onRematch,
+  net,
 }: {
   player: Character;
   onExit: () => void;
   onRematch: () => void;
+  /** ふたりで対戦のとき：あいてとのやりとり（無ければ、コンピュータと戦う） */
+  net?: NetBattle;
 }) {
-  const [enemy] = useState(() => pickCpu());
-  const [st] = useState(() => createBattle(player, enemy));
+  const [enemy] = useState(() => net?.opponent ?? pickCpu());
+  const [st] = useState(() => {
+    const b = createBattle(player, enemy);
+    if (net) b.active = net.iFirst ? 0 : 1; // 先に動く人は、部屋で決めたとおり
+    return b;
+  });
+  // ふたりで対戦のときは、二台で同じさいころ（同じ種）を使う。そうすれば、同じ技から同じ結果になる
+  const rng = useRef(net ? mulberry32(net.seed) : Math.random);
+  const moveNo = useRef(0);
+  const [gone, setGone] = useState(false);
   if (import.meta.env.DEV) (window as any).__battle = st; // 試すときに中を触るため（開発中だけ）
   const chars: [Character, Character] = [player, enemy];
   const stage = useRef<Stage | null>(null);
@@ -157,6 +170,25 @@ export function Battle({
       stopBgm(0.4);
     };
   }, []);
+  // あいてが、バトルをぬけた・部屋からいなくなった
+  useEffect(() => {
+    if (!net) return;
+    const off = net.onGone(() => {
+      if (st.over || !alive.current) return;
+      alive.current = false; // ここでバトルを止める
+      st.over = true;
+      pick.current = null;
+      stopBgm(1.0);
+      setGone(true);
+      setPhase('over');
+      setMsg(`${net.opponentName}さんが バトルを ぬけました`);
+    });
+    return off; // やりとりを閉じるのは App（開発中の二度呼びで閉じてしまわないように）
+  }, [net, st]);
+  const leave = () => {
+    if (net && !st.over) net.quit(moveNo.current);
+    onExit();
+  };
   useEffect(() => {
     speedRef.current = speed;
     if (stage.current) stage.current.speed = speed;
@@ -254,6 +286,20 @@ export function Battle({
     await s.wait(0.3);
   };
 
+  // 二台の計算がずれていたら（めったにない）、動いた人の HP に合わせる
+  const syncHp = (hp: [number, number]) => {
+    ([0, 1] as const).forEach((i) => {
+      if (typeof hp[i] === 'number' && st.f[i].hp !== hp[i]) {
+        console.warn('[net] HP がずれていたので合わせました', i, st.f[i].hp, '→', hp[i]);
+        st.f[i].hp = hp[i];
+        if (hp[i] <= 0 && !st.over) {
+          st.over = true;
+          st.winner = i === 0 ? 1 : 0;
+        }
+      }
+    });
+  };
+
   const run = async () => {
     const s = stage.current!;
     await s.intro();
@@ -266,6 +312,7 @@ export function Battle({
     await s.wait(0.75);
     setSplash(null);
 
+    let remote: [number, number] | null = null;
     while (!st.over && alive.current) {
       setRound(Math.ceil(st.turn / 2));
       const pre = startTurn(st);
@@ -281,6 +328,14 @@ export function Battle({
         setMsg('コマンドを選んでください');
         action = await new Promise<ActionType>((resolve) => (pick.current = resolve));
         pick.current = null;
+      } else if (net) {
+        // あいての番：あいてのスマホから、選んだ技が届くのを待つ
+        setPhase('busy');
+        setMsg(`${net.opponentName}さんが 考えています…`);
+        const m = await net.next(moveNo.current);
+        if (m === 'gone' || !alive.current) return;
+        action = m.action;
+        remote = m.hp;
       } else {
         setPhase('busy');
         setMsg(`${chars[1].spec.name} が 動く…`);
@@ -289,7 +344,13 @@ export function Battle({
       }
       if (!alive.current) return;
       setPhase('busy');
-      const res = act(st, action, Math.random);
+      const res = act(st, action, rng.current);
+      if (net) {
+        if (st.active === 0) net.send(moveNo.current, action, [st.f[0].hp, st.f[1].hp]);
+        else if (remote) syncHp(remote);
+        moveNo.current++;
+      }
+      remote = null;
       await direct(res);
       if (!alive.current || st.over) break;
       endTurn(st);
@@ -348,8 +409,8 @@ export function Battle({
           <button className="btn tiny" onClick={() => setSpeed(speed === 1 ? 2 : 1)}>
             ×{speed}
           </button>
-          <button className="btn tiny ghost" onClick={onExit}>
-            にげる
+          <button className="btn tiny ghost" onClick={leave}>
+            {net ? 'ぬける' : 'にげる'}
           </button>
         </div>
         <SidePanel c={chars[1]} h={hud[1]} side={1} />
@@ -394,16 +455,27 @@ export function Battle({
 
       <div className="hud-bottom">
         <div className="message">{msg}</div>
-        {result ? (
+        {gone ? (
+          <div className="result gone">
+            <div className="result-title small">あいてが ぬけました</div>
+            <div className="actions row">
+              <button className="btn primary" onClick={onExit}>
+                部屋にもどる
+              </button>
+            </div>
+          </div>
+        ) : result ? (
           <div className={`result ${result}`}>
             <div className="result-title">{result === 'win' ? 'YOU WIN' : 'YOU LOSE'}</div>
             <div className="actions row">
               <button className="btn primary" onClick={onRematch}>
-                もう一度
+                {net ? '部屋にもどる' : 'もう一度'}
               </button>
-              <button className="btn ghost" onClick={onExit}>
-                もどる
-              </button>
+              {!net && (
+                <button className="btn ghost" onClick={onExit}>
+                  もどる
+                </button>
+              )}
             </div>
           </div>
         ) : (

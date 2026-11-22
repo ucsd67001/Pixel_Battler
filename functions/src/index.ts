@@ -1,11 +1,12 @@
-// Firebase の Cloud Functions：写真をAIに読ませる窓口（/api/health と /api/analyze）。
+// Firebase の Cloud Functions：写真をAIに読ませる窓口（/api/health と /api/analyze）と、
+// 家族のしるしを付ける窓口（/api/family。しるしのある人だけが、ふたりで対戦の部屋を読み書きできる＝firestore.rules）。
 // Hosting の書き換え（firebase.json）で、同じドメインの /api/** がここに来る。
 // ⚠️ 鍵（OPENAI_API_KEY）と、許可する家族のアドレス（ALLOWED_EMAILS）は Secret Manager に置く。リポジトリには書かない。
 
 import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { initializeApp } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
+import { getAuth, type DecodedIdToken } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { analyzeImage, cacheKey, type SpecCache } from '../../server/analyze';
 
@@ -48,6 +49,21 @@ async function countUp(uid: string) {
   });
 }
 
+// ログインを確かめる。だめなら 401 を返して null
+async function verify(req: { get(name: string): string | undefined }, res: { status(n: number): { json(b: unknown): void } }) {
+  const token = (req.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+  if (!token) {
+    res.status(401).json({ error: 'login required' });
+    return null;
+  }
+  try {
+    return await getAuth().verifyIdToken(token);
+  } catch {
+    res.status(401).json({ error: 'login required' });
+    return null;
+  }
+}
+
 export const api = onRequest(
   {
     region: 'asia-northeast1',
@@ -61,6 +77,15 @@ export const api = onRequest(
       res.json({ ai: true, model: MODEL, auth: true });
       return;
     }
+    // 家族のしるし（family）を付ける。家族の一覧から外れた人からは外す
+    if (req.path.endsWith('/family')) {
+      const user: DecodedIdToken | null = await verify(req, res);
+      if (!user) return;
+      const fam = !!user.email_verified && allowed(user.email);
+      if (fam !== (user.family === true)) await getAuth().setCustomUserClaims(user.uid, fam ? { family: true } : {});
+      res.status(fam ? 200 : 403).json({ family: fam });
+      return;
+    }
     if (!req.path.endsWith('/analyze')) {
       res.status(404).json({ error: 'not found' });
       return;
@@ -71,18 +96,8 @@ export const api = onRequest(
     }
 
     // ログインと、家族の許可を確かめる
-    const token = (req.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
-    if (!token) {
-      res.status(401).json({ error: 'login required' });
-      return;
-    }
-    let user;
-    try {
-      user = await getAuth().verifyIdToken(token);
-    } catch {
-      res.status(401).json({ error: 'login required' });
-      return;
-    }
+    const user = await verify(req, res);
+    if (!user) return;
     if (!user.email_verified || !allowed(user.email)) {
       res.status(403).json({ error: 'not allowed' });
       return;

@@ -1,22 +1,44 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { isMuted, setMuted, sfx, unlockAudio } from './lib/sfx';
 import type { Character } from './game/types';
 import { Title } from './ui/Title';
 import { Create } from './ui/Create';
 import { Hangar } from './ui/Hangar';
 import { Battle } from './ui/Battle';
+import { Room } from './ui/Room';
+import type { NetBattle, RoomSession } from './net/room';
 
 type Screen =
   | { name: 'title' }
   | { name: 'create' }
   | { name: 'hangar' }
-  | { name: 'battle'; char: Character; key: number };
+  | { name: 'battle'; char: Character; key: number }
+  | { name: 'room' }
+  | { name: 'netbattle'; char: Character; net: NetBattle; key: number };
 
 export function App() {
   const [screen, setScreen] = useState<Screen>({ name: 'title' });
   const fight = (char: Character) => setScreen({ name: 'battle', char, key: Date.now() });
   const title = () => setScreen({ name: 'title' });
   const [muted, setMutedState] = useState(isMuted());
+
+  // ふたりで対戦の部屋（部屋の画面とバトルの画面をまたいで、入ったままにする）
+  const [session, setSession] = useState<RoomSession | null>(null);
+  const sessionRef = useRef<RoomSession | null>(null);
+  sessionRef.current = session;
+  const onNetBattle = useCallback((net: NetBattle) => setScreen({ name: 'netbattle', char: net.me, net, key: Date.now() }), []);
+  const leaveRoom = () => {
+    session?.leave();
+    session?.close();
+    setSession(null);
+    title();
+  };
+  useEffect(() => {
+    // ページを閉じたら、部屋から出る（届かなくても、60秒でいないことになる）
+    const bye = () => void sessionRef.current?.leave();
+    window.addEventListener('pagehide', bye);
+    return () => window.removeEventListener('pagehide', bye);
+  }, []);
 
   // ボタンを押したら音を鳴らす（ブラウザは、最初に触ったときから音を出せる）
   useEffect(() => {
@@ -55,6 +77,7 @@ export function App() {
           onCreate={() => setScreen({ name: 'create' })}
           onHangar={() => setScreen({ name: 'hangar' })}
           onFight={fight}
+          onRoom={() => setScreen({ name: 'room' })}
         />
       );
     case 'create':
@@ -70,6 +93,15 @@ export function App() {
           onRematch={() => fight(screen.char)}
         />
       );
+    case 'room':
+      return <Room session={session} setSession={setSession} onBattle={onNetBattle} onBack={leaveRoom} />;
+    case 'netbattle': {
+      const back = () => {
+        screen.net.close();
+        setScreen({ name: 'room' });
+      };
+      return <Battle key={screen.key} player={screen.char} net={screen.net} onExit={back} onRematch={back} />;
+    }
   }
   }
 }
