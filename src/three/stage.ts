@@ -98,16 +98,16 @@ export class Stage {
 
     this.composer = new EffectComposer(r);
     this.composer.addPass(new RenderPass(s, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.75, 0.5, 0.88);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.75, 0.5, 0.93);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
 
     if (mode === 'battle') {
-      this.basePos.set(0, 2.3, 7.4);
-      this.baseLook.set(0, 1.05, 0);
+      this.basePos.set(0, 2.45, 7.6);
+      this.baseLook.set(0, 1.2, 0);
     } else {
-      this.basePos.set(0, 1.35, 4.5);
-      this.baseLook.set(0, 1.0, 0);
+      this.basePos.set(0, 1.55, 5.3);
+      this.baseLook.set(0, 1.18, 0);
     }
     this.camPos.copy(this.basePos);
     this.camLook.copy(this.baseLook);
@@ -238,14 +238,14 @@ export class Stage {
       // 二体と少しの余白（左右に 3.1）が横に収まるところまで、カメラを引く
       this.camera.fov = 40;
       const tanH = Math.tan(THREE.MathUtils.degToRad(20)) * aspect;
-      const dist = Math.max(7.4, 3.1 / tanH);
-      this.basePos.set(0, 2.3 + (dist - 7.4) * 0.1, dist);
-      this.baseLook.set(0, 1.05 + Math.min(0.5, (dist - 7.4) * 0.06), 0);
+      const dist = Math.max(7.6, 3.1 / tanH);
+      this.basePos.set(0, 2.45 + (dist - 7.6) * 0.1, dist);
+      this.baseLook.set(0, 1.2 + Math.min(0.5, (dist - 7.6) * 0.06), 0);
     } else {
       this.camera.fov = 38;
       const tanH = Math.tan(THREE.MathUtils.degToRad(19)) * aspect;
-      const dist = Math.max(4.5, 1.3 / tanH);
-      this.basePos.set(0, 1.35, dist);
+      const dist = Math.max(5.3, 1.5 / tanH);
+      this.basePos.set(0, 1.55, dist);
     }
     if (wasHome) {
       this.camPos.copy(this.basePos);
@@ -682,8 +682,8 @@ export class Stage {
     const r = this.robots[side]!;
     const c = this.color(side);
     await this.face(side, false, 0.2);
-    const front = new THREE.Vector3(r.root.position.x + this.dir(side) * 1.7, 1.5, 4.4);
-    const look = new THREE.Vector3(r.root.position.x, 1.0, 0);
+    const front = new THREE.Vector3(r.root.position.x + this.dir(side) * 1.8, 1.7, 4.9);
+    const look = new THREE.Vector3(r.root.position.x, 1.15, 0);
     this.camTo(front, look, 0.9);
     await Promise.all([
       this.pose(side, 'victory', 0.4, Ease.outBack),
@@ -704,8 +704,8 @@ export class Stage {
 
     // ① 暗くして、寄る
     this.dim(true);
-    const front = new THREE.Vector3(p.x + dir * 2.6, 1.35, p.z + 2.8);
-    const look = new THREE.Vector3(p.x, 1.2, p.z);
+    const front = new THREE.Vector3(p.x + dir * 2.7, 1.55, p.z + 3.1);
+    const look = new THREE.Vector3(p.x, r.chestY, p.z);
     await Promise.all([this.camTo(front, look, 0.45), this.pose(side, 'charge', 0.35, Ease.outBack)]);
     this.fx.ring(this.feet(side), c, 2.3, 0.7);
     this.fx.aura(() => this.feet(side), c, 1.3, 40, 0.75);
