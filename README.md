@@ -1,4 +1,6 @@
-# SNAPGEAR（仮の名前）
+# PIXEL BATTLER
+
+（はじめの仮の名前は SNAPGEAR。手元のフォルダ名 `snapgear` はそのまま）
 
 写真を読み込むと、その写真の「いちばん特徴的なもの」をもとに SD ロボが生まれ、コンピュータと戦うブラウザゲーム。
 バーコードバトラーの「読み込んで、生まれて、戦う」を、3D と演出で今風にしたもの。いまは MVP（プレイヤー1体 対 固定のCPU1体）。
@@ -15,6 +17,29 @@ cd C:\Users\ucsd6\dev\snapgear; npm run dev
 - **モデル**：既定は `gpt-6-luna`。画像を読めなかったら `gpt-4.1-mini` に切り替える。`.env` に `GAME_MODEL=...` で替えられる
 - **同じ写真なら同じロボ**：AIの答えは `.cache/specs/` に写真の印（ハッシュ）ごとに残す。数値は印から機械で決める
 - 同じ Wi-Fi のスマホから試すとき：`npm run dev -- --host` で起動し、表示される Network の URL を開く
+- 手元では、ログインなしで写真から作れる（ログインと家族の許可は Firebase の上だけ）
+
+## Firebase に載せる（Hosting ＋ Cloud Functions）
+
+- プロジェクト：`pixel-battler-gemu`（表示名 Pixel Battler。`pixel-battler` は使われていた）。料金プランは Blaze（従量課金）
+- **画面**は Hosting、**写真を読む窓口**は Cloud Functions の `api`（東京 asia-northeast1）。同じドメインの `/api/**` が `api` に届く（`firebase.json` の rewrites）
+- **鍵**は Secret Manager：`OPENAI_API_KEY`（OpenAI の鍵）と `ALLOWED_EMAILS`（写真から作ってよい家族の Gmail。カンマ区切り）。**どちらもリポジトリに書かない**
+- **ログイン**：写真から作るときだけ Google でログイン。`ALLOWED_EMAILS` にあるアドレスの人だけが作れる。バトルと格納庫はログインなしで遊べる
+- **歯止め**：一人一日30回まで（`functions/src/index.ts` の `DAILY_LIMIT`）。同じ写真の2回目からは、取っておいた設計図を返すので数えない
+- **同じ写真なら同じロボ**：Firebase の上では、設計図を Firestore の `specs/` に取っておく（画面から Firestore は読めない＝`firestore.rules`）
+- 画面用の Firebase の接続設定は `.env` の `VITE_FIREBASE_*`（`.env.example` に名前）
+
+```powershell
+cd C:\Users\ucsd6\dev\snapgear; npm run deploy
+```
+
+（画面を作る → 窓口を一つのファイルにまとめる（`functions/lib/`）→ `firebase deploy`）
+
+家族を足すとき（今のアドレスも含めて、全部をカンマ区切りで入れ直す。入れたら `npm run deploy`）：
+
+```powershell
+cd C:\Users\ucsd6\dev\snapgear; firebase functions:secrets:set ALLOWED_EMAILS
+```
 
 ## 遊び方
 
@@ -37,6 +62,8 @@ cd C:\Users\ucsd6\dev\snapgear; npm run dev
 |---|---|
 | `server/analyze.ts` | 写真を OpenAI に読ませて、設計図（JSON）を受け取る。**Firebase の Cloud Functions に移すときは、ここをそのまま呼ぶ** |
 | `vite.config.ts` | 開発サーバーに `/api/analyze` と `/api/health` を足している（鍵の読み込みもここ） |
+| `functions/src/index.ts` | Firebase の窓口。ログインと家族の許可・一日の回数を確かめてから `server/analyze.ts` を呼ぶ |
+| `src/lib/firebase.ts` | Google ログイン |
 | `src/game/` | ゲームの決まり（画面と切り離した計算）。`battle.ts`＝バトル、`stats.ts`＝数値、`data.ts`＝スキル・特性の表、`cpu.ts`＝CPUのキャラと考え方 |
 | `src/three/` | 3D。`robot.ts`＝部品を組むロボとポーズ、`stage.ts`＝バトル場と演出、`effects.ts`＝光・ビーム・斬撃 |
 | `src/ui/` | 画面（タイトル・作成・格納庫・バトル） |
@@ -52,6 +79,5 @@ cd C:\Users\ucsd6\dev\snapgear; npm run dev
 
 ## これから（MVPの先）
 
-- スマホで遊ぶ（Firebase Hosting ＋ Cloud Functions。鍵はサーバー側）
 - プレイヤー同士・いろいろなCPU
 - 写真から3Dモデルを作るサービスとの組み合わせ（見た目の自由度を上げる）

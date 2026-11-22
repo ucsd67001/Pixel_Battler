@@ -2,7 +2,7 @@ import { defineConfig, loadEnv, type Connect, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import fs from 'node:fs';
 import path from 'node:path';
-import { analyzeImage } from './server/analyze';
+import { analyzeImage, type SpecCache } from './server/analyze';
 
 // 鍵を探す：① .env の OPENAI_API_KEY ② .env の KEY_ENV_FILE が指す別のファイルの OPENAI_API_KEY
 // ⚠️ 鍵は表示しない
@@ -39,6 +39,17 @@ function apiPlugin(env: Record<string, string>): Plugin {
   const apiKey = readKey(env);
   const model = env.GAME_MODEL || 'gpt-6-luna';
   const cacheDir = path.resolve(process.cwd(), '.cache/specs');
+  // 手元では、設計図をファイルに取っておく
+  const cache: SpecCache = {
+    async get(hash) {
+      const f = path.join(cacheDir, `${hash}.json`);
+      return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null;
+    },
+    async set(hash, spec) {
+      fs.mkdirSync(cacheDir, { recursive: true });
+      fs.writeFileSync(path.join(cacheDir, `${hash}.json`), JSON.stringify(spec, null, 2), 'utf8');
+    },
+  };
 
   const send = (res: any, status: number, data: unknown) => {
     res.statusCode = status;
@@ -46,7 +57,7 @@ function apiPlugin(env: Record<string, string>): Plugin {
     res.end(JSON.stringify(data));
   };
 
-  const health: Connect.NextHandleFunction = (_req, res) => send(res, 200, { ai: !!apiKey, model });
+  const health: Connect.NextHandleFunction = (_req, res) => send(res, 200, { ai: !!apiKey, model, auth: false });
 
   const analyze: Connect.NextHandleFunction = async (req, res) => {
     if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
@@ -56,7 +67,7 @@ function apiPlugin(env: Record<string, string>): Plugin {
       const result = await analyzeImage(String(body.image ?? ''), String(body.hash ?? ''), {
         apiKey,
         model,
-        cacheDir,
+        cache,
       });
       console.log(`[analyze] ${result.spec.motif} → ${result.spec.name}（${result.model}）`);
       send(res, 200, result);
@@ -71,7 +82,7 @@ function apiPlugin(env: Record<string, string>): Plugin {
   };
 
   return {
-    name: 'snapgear-api',
+    name: 'pixel-battler-api',
     configureServer(server) {
       console.log(apiKey ? `[api] 鍵あり・モデル ${model}` : '[api] 鍵が見つからない（写真の色だけで作る）');
       mount(server.middlewares);

@@ -1,16 +1,20 @@
 // 写真を OpenAI に読ませて、キャラの設計図（CharacterSpec）を作る。
 // ⚠️ 鍵はこのファイルの外から渡す。鍵をログやエラーに出さない。
-// 将来 Firebase の Cloud Functions に移すときは、analyzeImage をそのまま呼べばよい。
+// 手元（vite.config.ts）でも Firebase の Cloud Functions（functions/src/index.ts）でも、analyzeImage をそのまま呼ぶ。
+// 取っておく場所（cache）は呼ぶ側が渡す：手元はファイル、Firebase は Firestore。
 
-import fs from 'node:fs';
-import path from 'node:path';
 import type { CharacterSpec } from '../src/game/types';
 import { sanitizeSpec, SPEC_JSON_SCHEMA } from '../src/game/spec';
+
+export interface SpecCache {
+  get(hash: string): Promise<unknown | null>;
+  set(hash: string, spec: CharacterSpec): Promise<void>;
+}
 
 export interface AnalyzeOptions {
   apiKey: string;
   model: string;
-  cacheDir: string;
+  cache: SpecCache;
 }
 
 export interface AnalyzeResult {
@@ -100,11 +104,8 @@ export async function analyzeImage(image: string, hash: string, opt: AnalyzeOpti
   if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(image)) throw new Error('bad image');
 
   // 同じ写真には、同じ設計図を返す
-  const file = path.join(opt.cacheDir, `${hash}.json`);
-  if (fs.existsSync(file)) {
-    const spec = sanitizeSpec(JSON.parse(fs.readFileSync(file, 'utf8')));
-    return { spec, cached: true, model: 'cache' };
-  }
+  const hit = await opt.cache.get(hash).catch(() => null);
+  if (hit) return { spec: sanitizeSpec(hit), cached: true, model: 'cache' };
 
   const models = [opt.model];
   if (opt.model !== 'gpt-4.1-mini') models.push('gpt-4.1-mini');
@@ -112,8 +113,7 @@ export async function analyzeImage(image: string, hash: string, opt: AnalyzeOpti
   for (const model of models) {
     try {
       const spec = sanitizeSpec(await callOpenAI(image, model, opt.apiKey));
-      fs.mkdirSync(opt.cacheDir, { recursive: true });
-      fs.writeFileSync(file, JSON.stringify(spec, null, 2), 'utf8');
+      await opt.cache.set(hash, spec).catch((e) => console.warn(`[analyze] cache: ${String(e).slice(0, 200)}`));
       return { spec, cached: false, model };
     } catch (e) {
       lastError = e;

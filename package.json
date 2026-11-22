@@ -1,5 +1,5 @@
 {
-  "name": "snapgear",
+  "name": "pixel-battler",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -8,9 +8,12 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "sim": "tsx scripts/sim.ts"
+    "sim": "tsx scripts/sim.ts",
+    "build:functions": "esbuild functions/src/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=functions/lib/index.js --external:firebase-functions --external:firebase-admin",
+    "deploy": "npm run build && npm run build:functions && firebase deploy"
   },
   "dependencies": {
+    "firebase": "^13.4.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "three": "^0.170.0"
@@ -21,6 +24,7 @@
     "@types/react-dom": "^18.3.1",
     "@types/three": "^0.170.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "esbuild": "^0.21.5",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"

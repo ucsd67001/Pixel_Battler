@@ -5,3 +5,10 @@ dist/
 .env.*
 !.env.example
 *.log
+
+# Firebase
+functions/node_modules/
+functions/lib/
+.firebase/
+firebase-debug.log
+firestore-debug.log

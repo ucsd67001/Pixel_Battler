@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Character } from '../game/types';
 import { loadHangar } from '../game/storage';
 import { CPU_CHARACTER } from '../game/cpu';
-import { checkHealth } from '../lib/api';
+import { checkHealth, type Health } from '../lib/api';
 import { Showcase } from './StageView';
 
 export function Title({
@@ -15,7 +15,7 @@ export function Title({
   onFight: (c: Character) => void;
 }) {
   const [hangar] = useState(loadHangar);
-  const [ai, setAi] = useState<{ ai: boolean; model: string } | null>(null);
+  const [ai, setAi] = useState<Health | null>(null);
   useEffect(() => {
     checkHealth().then(setAi);
   }, []);
@@ -25,7 +25,7 @@ export function Title({
       <Showcase spec={(latest ?? CPU_CHARACTER).spec} className="stage stage-bg" />
       <div className="title-overlay">
         <div className="logo">
-          <span className="logo-main">SNAPGEAR</span>
+          <span className="logo-main">PIXEL BATTLER</span>
           <span className="logo-sub">写真から、相棒を組み上げろ。</span>
         </div>
         <div className="menu">

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Character } from '../game/types';
 import { prepareImage } from '../lib/image';
-import { analyze } from '../lib/api';
+import { AccessError, analyze, checkHealth, type Health } from '../lib/api';
+import { login, logout, useUser } from '../lib/firebase';
 import { localSpec } from '../game/fallback';
 import { buildCharacter } from '../game/stats';
 import { findBySeed, saveCharacter } from '../game/storage';
@@ -29,6 +30,12 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
   const [line, setLine] = useState(0);
   const [drag, setDrag] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const user = useUser();
+  const [health, setHealth] = useState<Health | null>(null);
+  useEffect(() => {
+    checkHealth().then(setHealth);
+  }, []);
+  const needLogin = !!health?.auth && user === null;
 
   useEffect(() => {
     if (step !== 'scan') return;
@@ -59,6 +66,11 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
         const r = await analyze(img.dataUrl, img.hash);
         ch = buildCharacter(r.spec, img.hash, 'ai', img.thumb);
       } catch (e) {
+        if (e instanceof AccessError) {
+          setError(e.message);
+          setStep('pick');
+          return;
+        }
         console.warn('analyze failed', e);
         ch = buildCharacter(localSpec(img.hash, img.colors), img.hash, 'local', img.thumb);
         n = 'AIにつながらなかったため、写真の色から組み立てました。';
@@ -80,7 +92,24 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
             ◀ もどる
           </button>
           <span className="bar-title">NEW GEAR</span>
+          {user && (
+            <button className="btn ghost small bar-right" onClick={() => logout()}>
+              {user.displayName ?? user.email} ・ ログアウト
+            </button>
+          )}
         </header>
+        {needLogin ? (
+          <div className="dropzone login-panel">
+            <div className="dz-main">Google でログイン</div>
+            <div className="dz-sub">写真から作れるのは、家族のアカウントだけです。</div>
+            <button
+              className="btn primary big"
+              onClick={() => login().catch((e) => setError(`ログインできませんでした（${(e as Error).message}）`))}
+            >
+              Google でログインする
+            </button>
+          </div>
+        ) : (
         <div
           className={`dropzone${drag ? ' drag' : ''}`}
           onClick={() => input.current?.click()}
@@ -112,6 +141,7 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
             }}
           />
         </div>
+        )}
         {error && <div className="error">{error}</div>}
       </div>
     );
