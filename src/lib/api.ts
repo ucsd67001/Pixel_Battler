@@ -1,6 +1,7 @@
 import type { CharacterSpec } from '../game/types';
 import { sanitizeSpec } from '../game/spec';
 import { idToken } from './firebase';
+import { GARAGE_FULL_MSG } from '../game/storage';
 
 // auth＝写真から作るのにログインが要るか（Firebase の上では true、手元では false）
 export interface Health {
@@ -42,6 +43,7 @@ export async function analyze(image: string, hash: string): Promise<{ spec: Char
     const data = await r.json().catch(() => ({}));
     if (r.status === 401) throw new AccessError(401, 'Google でログインしてください。');
     if (r.status === 403) throw new AccessError(403, 'このアカウントでは、写真から作れません（メールアドレスの確認が済んだ Google アカウントが要ります）。');
+    if (r.status === 409) throw new AccessError(409, GARAGE_FULL_MSG);
     if (r.status === 429)
       throw new AccessError(
         429,

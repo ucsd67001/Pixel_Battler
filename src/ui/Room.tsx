@@ -4,7 +4,7 @@
 
 import { useEffect, useState, type CSSProperties } from 'react';
 import type { Character } from '../game/types';
-import { loadHangar } from '../game/storage';
+import { useGarage } from '../game/garage';
 import { ELEMENT_INFO } from '../game/data';
 import { login, useUser } from '../lib/firebase';
 import { isLocalRoom, makeNetBattle, openRoomLink, RoomSession, type NetBattle, type RoomPlayer, type RoomState } from '../net/room';
@@ -53,7 +53,7 @@ export function Room({
   const user = useUser();
   const [status, setStatus] = useState<Status>(session ? 'ready' : 'loading');
   const [state, setState] = useState<RoomState>(session?.state ?? { players: [], battle: null });
-  const [hangar] = useState(loadHangar);
+  const hangar = useGarage().list;
   const [pick, setPick] = useState<Character | null>(null);
   const [choosing, setChoosing] = useState(false);
   const [busy, setBusy] = useState(false);

@@ -20,6 +20,8 @@ export interface AnalyzeOptions {
   apiKey: string;
   model: string;
   cache: SpecCache;
+  // 開発者だけが知る決まり（どんな写真なら bonus を 1 にするか）。鍵の置き場から渡す。無ければ、いつも 0
+  hiddenRule?: string;
 }
 
 export interface AnalyzeResult {
@@ -66,14 +68,16 @@ const USER_PROMPT = 'この写真から、ロボを一体設計してくださ�
 
 const REASONING = /^(gpt-5|gpt-6|o1|o3|o4)/;
 
-async function callOpenAI(image: string, model: string, apiKey: string, avoid: string[] = []): Promise<unknown> {
+async function callOpenAI(image: string, model: string, apiKey: string, rule: string, avoid: string[] = []): Promise<unknown> {
   const text = avoid.length
     ? `${USER_PROMPT}\n注意：「${avoid.join('」「')}」は小学校で習わない漢字なので、使わないでください（ひらがなかカタカナにするか、やさしい言葉に言いかえる）。`
     : USER_PROMPT;
   const body: Record<string, unknown> = {
     model,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: `${SYSTEM_PROMPT}
+
+${rule}` },
       {
         role: 'user',
         content: [
@@ -118,18 +122,19 @@ export async function analyzeImage(image: string, hash: string, opt: AnalyzeOpti
   const hit = await opt.cache.get(cacheKey(hash)).catch(() => null);
   if (hit) return { spec: sanitizeSpec(hit), cached: true, model: 'cache' };
 
+  const rule = opt.hiddenRule?.trim() || '- bonus：いつも 0 にする。';
   const models = [opt.model];
   if (opt.model !== 'gpt-4.1-mini') models.push('gpt-4.1-mini');
   let lastError: unknown = null;
   for (const model of models) {
     try {
-      let spec = sanitizeSpec(await callOpenAI(image, model, opt.apiKey));
+      let spec = sanitizeSpec(await callOpenAI(image, model, opt.apiKey, rule));
       // 小学校で習わない漢字が入っていたら、その字を名指しして一度だけ作り直す（指示だけでは守られないことがある）
       const hard = specHardKanji(spec);
       if (hard.length) {
         console.warn(`[analyze] 小学校で習わない漢字：${hard.join('')} → 作り直し`);
         try {
-          const again = sanitizeSpec(await callOpenAI(image, model, opt.apiKey, hard));
+          const again = sanitizeSpec(await callOpenAI(image, model, opt.apiKey, rule, hard));
           if (specHardKanji(again).length < hard.length) spec = again;
         } catch (e) {
           console.warn(`[analyze] 作り直しに失敗：${String((e as Error).message).slice(0, 200)}`);

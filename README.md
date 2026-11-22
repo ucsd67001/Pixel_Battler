@@ -26,10 +26,11 @@ cd C:\Users\ucsd6\dev\snapgear; npm run dev
 
 - プロジェクト：`pixel-battler-gemu`（表示名 Pixel Battler。`pixel-battler` は使われていた）。料金プランは Blaze（従量課金）
 - **画面**は Hosting、**写真を読む窓口**は Cloud Functions の `api`（東京 asia-northeast1）。同じドメインの `/api/**` が `api` に届く（`firebase.json` の rewrites）
-- **鍵**は Secret Manager：`OPENAI_API_KEY`（OpenAI の鍵）と `ALLOWED_EMAILS`（家族の Gmail。カンマ区切り。家族は作れる回数が多い）。**どちらもリポジトリに書かない**
+- **鍵**は Secret Manager：`OPENAI_API_KEY`（OpenAI の鍵）と `ALLOWED_EMAILS`（家族の Gmail。カンマ区切り。家族は作れる回数が多い）と `HIDDEN_RULE`（開発者だけが知る決まり。中身はここにも書かない）。**どれもリポジトリに書かない**
 - **ログイン**：写真から作るときと、ふたりで対戦のときに Google でログイン。**Google のアカウントならだれでも使える**（2026-11-22 から。それまでは家族だけ）。コンピュータとのバトルと格納庫は、ログインなしで遊べる
 - **歯止め**（`functions/src/index.ts`）：家族は一人一日30回、家族以外は一人一日10回、家族以外の全員を合わせて一日200回。同じ写真の2回目からは、取っておいた設計図を返すので数えない。OpenAI の側にも、使える金額の上限を置いてある
 - **ふたりで対戦**：Firestore の `rooms/main`（バトル）と `rooms/main/players/{uid}`（部屋にいる人。一人一枚）と `rooms/main/moves`（選んだ技）。ログインした人ならだれでも使えるが、ほかの人の分は書きかえられない（`firestore.rules`）。知らない人とも会うので、出すのはロボの名前だけ。写真は部屋に送らない
+- **ガレージ**（一人30体まで）：ログインしているときは Firestore の `users/{uid}/robots/{写真の印}`（ほかのスマホでも同じ）。入れるのはサーバー（`/api/robots`。数字はサーバーが計算し直す＝`server/garage.ts`）、見る・消すのは本人だけ。ログインしていないときは、このスマホの中（localStorage）。ログインしたとき、このスマホのロボを一度だけクラウドへ移す。ガレージがいっぱいなら、AI に読ませる前に止める（409）。手元（npm run dev）では、いつもこのスマホの中
 - **同じ写真なら同じロボ**：Firebase の上では、設計図を Firestore の `specs/` に取っておく（画面から Firestore は読めない＝`firestore.rules`）
 - 画面用の Firebase の接続設定は `.env` の `VITE_FIREBASE_*`（`.env.example` に名前）
 

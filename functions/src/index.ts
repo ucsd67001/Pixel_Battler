@@ -1,4 +1,5 @@
-// Firebase の Cloud Functions：写真をAIに読ませる窓口（/api/health と /api/analyze）。
+// Firebase の Cloud Functions：写真をAIに読ませる窓口（/api/health と /api/analyze）と、
+// ロボをクラウドのガレージに入れる窓口（/api/robots。一人30体まで。一覧と消すのは、画面が Firestore を直接使う）。
 // Hosting の書き換え（firebase.json）で、同じドメインの /api/** がここに来る。
 // 写真から作れるのは、Google でログインした人だれでも（2026-11-22 から。それまでは家族だけ）。
 // 回数の上限：家族（ALLOWED_EMAILS）は一人一日30回、家族以外は一人一日10回、家族以外の全員を合わせて一日200回。
@@ -10,9 +11,12 @@ import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { analyzeImage, cacheKey, type SpecCache } from '../../server/analyze';
+import { GARAGE_LIMIT, makeRobot, readRobotInput } from '../../server/garage';
+import type { CharacterSpec } from '../../src/game/types';
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 const ALLOWED_EMAILS = defineSecret('ALLOWED_EMAILS'); // カンマ区切り
+const HIDDEN_RULE = defineSecret('HIDDEN_RULE'); // 開発者だけが知る決まり。中身はリポジトリに書かない
 const MODEL = process.env.GAME_MODEL || 'gpt-6-luna';
 // 写真から作れる回数（料金の歯止め。日本時間の一日ごと）
 const FAMILY_DAILY = 30; // 家族は一人一日
@@ -21,6 +25,13 @@ const GUEST_TOTAL_DAILY = 200; // 家族以外の全員を合わせて一日
 
 initializeApp();
 const db = getFirestore();
+db.settings({ ignoreUndefinedProperties: true }); // 写真の無いロボ（thumb が無い）も、そのまま入れる
+
+const robots = (uid: string) => db.collection('users').doc(uid).collection('robots');
+// ガレージに何体いるか（30体を超えて数えない）
+async function garageCount(uid: string) {
+  return (await robots(uid).select().limit(GARAGE_LIMIT).get()).size;
+}
 
 const cache: SpecCache = {
   async get(hash) {
@@ -75,7 +86,7 @@ async function verify(req: { get(name: string): string | undefined }, res: { sta
 export const api = onRequest(
   {
     region: 'asia-northeast1',
-    secrets: [OPENAI_API_KEY, ALLOWED_EMAILS],
+    secrets: [OPENAI_API_KEY, ALLOWED_EMAILS, HIDDEN_RULE],
     timeoutSeconds: 120,
     memory: '512MiB',
     maxInstances: 3,
@@ -85,7 +96,9 @@ export const api = onRequest(
       res.json({ ai: true, model: MODEL, auth: true });
       return;
     }
-    if (!req.path.endsWith('/analyze')) {
+    const isAnalyze = req.path.endsWith('/analyze');
+    const isRobots = req.path.endsWith('/robots');
+    if (!isAnalyze && !isRobots) {
       res.status(404).json({ error: 'not found' });
       return;
     }
@@ -103,18 +116,57 @@ export const api = onRequest(
     }
     const family = isFamily(user.email);
 
+    // ── ロボをクラウドのガレージに入れる ──
+    if (isRobots) {
+      try {
+        const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+        const inp = readRobotInput(body);
+        if (!inp) {
+          res.status(400).json({ error: 'bad robot' });
+          return;
+        }
+        const cached = (await cache.get(cacheKey(inp.hash)).catch(() => null)) as CharacterSpec | null;
+        const ref = robots(user.uid).doc(inp.hash);
+        // 同じ写真のロボがもういれば、それを返す。いなければ、30体より少ないときだけ入れる
+        const out = await db.runTransaction(async (tx) => {
+          const cur = await tx.get(ref);
+          if (cur.exists) return cur.data();
+          const n = (await tx.get(robots(user.uid).select().limit(GARAGE_LIMIT))).size;
+          if (n >= GARAGE_LIMIT) return 'full' as const;
+          const robot = makeRobot(inp, cached);
+          tx.set(ref, robot);
+          return robot;
+        });
+        if (out === 'full') res.status(409).json({ error: 'garage full', limit: GARAGE_LIMIT });
+        else res.json({ robot: out });
+      } catch (e) {
+        res.status(500).json({ error: String((e as Error).message).slice(0, 200) });
+      }
+      return;
+    }
+
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       const image = String(body?.image ?? '');
       const hash = String(body?.hash ?? '');
       // 取っておいたものがあれば、回数に数えずに返す
       const hit = /^[a-f0-9]{64}$/.test(hash) ? await cache.get(cacheKey(hash)).catch(() => null) : null;
+      // ガレージがいっぱいなら、AI に読ませる前に止める（作っても入れられないため）
+      if (!hit && (await garageCount(user.uid)) >= GARAGE_LIMIT) {
+        res.status(409).json({ error: 'garage full', limit: GARAGE_LIMIT });
+        return;
+      }
       const count = hit ? 'ok' : await countUp(user.uid, family);
       if (count !== 'ok') {
         res.status(429).json({ error: count === 'all' ? 'everyone limit' : 'daily limit', limit: family ? FAMILY_DAILY : GUEST_DAILY });
         return;
       }
-      const result = await analyzeImage(image, hash, { apiKey: OPENAI_API_KEY.value(), model: MODEL, cache });
+      const result = await analyzeImage(image, hash, {
+        apiKey: OPENAI_API_KEY.value(),
+        model: MODEL,
+        cache,
+        hiddenRule: HIDDEN_RULE.value(),
+      });
       console.log(`[analyze] ${result.spec.motif} → ${result.spec.name}（${result.model}）`);
       res.json(result);
     } catch (e) {

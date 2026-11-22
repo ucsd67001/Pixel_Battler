@@ -12,10 +12,13 @@ export const STAT_RANGE = {
   def: { min: 120, max: 330 },
 };
 
+// 特別な写真のロボ（spec.bonus）は、総合力がこれだけ上がる（ランクがおよそ一つ上がる）
+export const BONUS_POWER = 6;
+
 export function computeStats(spec: CharacterSpec, seed: string): { stats: Stats; rank: Rank; power: number } {
   const rng = rngFrom('stats:' + seed);
   // 総合力は 92〜108。同じ写真なら毎回同じ。
-  const power = 92 + rng() * 16;
+  const power = 92 + rng() * 16 + (spec.bonus ? BONUS_POWER : 0);
   const w = {
     hp: spec.bias.hp + rng() * 1.2,
     sp: spec.bias.sp + rng() * 1.2,

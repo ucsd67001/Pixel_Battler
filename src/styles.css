@@ -1587,3 +1587,23 @@ button {
   color: #ffd23a;
   text-shadow: 0 0 10px rgba(255, 210, 58, 0.6);
 }
+
+/* ── ガレージ：数と、どこにしまってあるか ── */
+.garage-count {
+  font-family: var(--mono, monospace);
+  font-size: 13px;
+  color: var(--muted);
+}
+.garage-note {
+  padding: 8px 16px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.hangar-screen > .error {
+  margin: 0 16px 8px;
+}
+.create-screen > .note {
+  max-width: 560px;
+  margin: 0 auto 12px;
+}

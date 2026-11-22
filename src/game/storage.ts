@@ -1,8 +1,11 @@
-// 作ったキャラを、このブラウザの中に保存する（格納庫）
+// 作ったキャラを、このブラウザの中に保存する（ガレージ）。ログインしていないときに使う。
+// ログインしているときは、クラウドのガレージ（garage.ts）を使い、ここにあるロボは一度だけクラウドへ移す。
 
 import type { Character } from './types';
 
 const KEY = 'snapgear.hangar.v1';
+export const GARAGE_LIMIT = 30; // ガレージに入れられるロボの数（クラウドも、このスマホも。server/garage.ts と同じ）
+export const GARAGE_FULL_MSG = `ガレージが いっぱいです（${GARAGE_LIMIT}体まで）。ガレージで どれかを消してから、作ってください。`;
 
 export function loadHangar(): Character[] {
   try {
@@ -30,7 +33,7 @@ function save(list: Character[]) {
 export function saveCharacter(c: Character) {
   const list = loadHangar().filter((x) => x.seed !== c.seed);
   list.unshift(c);
-  save(list.slice(0, 40));
+  save(list.slice(0, GARAGE_LIMIT));
 }
 
 export function deleteCharacter(id: string) {

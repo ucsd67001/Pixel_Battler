@@ -53,6 +53,9 @@ export interface CharacterSpec {
   skill: { name: string; kind: SkillKind; description: string };
   ultimate: { name: string; style: UltStyle; description: string; shout: string };
   trait: Trait;
+  // 特別な写真から生まれたロボ（1）。総合力と技が少し強くなる。
+  // どんな写真が特別かは、サーバーの鍵の置き場（HIDDEN_RULE）にだけ書く。リポジトリには書かない
+  bonus?: 0 | 1;
 }
 
 export interface Stats {

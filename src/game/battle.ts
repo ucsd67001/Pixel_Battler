@@ -4,6 +4,8 @@
 import type { Character } from './types';
 import { elementMultiplier, SKILL_TABLE, ULT_POWER, ULT_TABLE } from './data';
 
+const BONUS_SKILL = 1.1;
+
 export type Side = 0 | 1;
 export type ActionType = 'attack' | 'guard' | 'skill' | 'ultimate';
 export type Rng = () => number;
@@ -176,6 +178,7 @@ function dealDamage(st: BattleState, attacker: Side, mult: number, rng: Rng, opt
   if (A.c.spec.trait === 'pierce') def *= 0.75;
   let m = mult;
   if (A.c.spec.trait === 'focus' && opts.skill) m *= 1.2;
+  if (A.c.spec.bonus && (opts.skill || opts.ult)) m *= BONUS_SKILL; // 特別な写真のロボは、技が少し強い
   if (A.c.spec.trait === 'first' && !A.firstUsed) m *= 1.5;
   const eff = elementMultiplier(A.c.spec.element, D.c.spec.element);
   const crit = rng() < (A.c.spec.trait === 'lucky' ? 0.25 : 0.08);
@@ -220,7 +223,7 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
       hit(1.0);
       break;
     case 'guard':
-      res.name = 'ガード';
+      res.name = 'ガード＆リペア';
       A.guarding = true;
       A.sp = Math.min(A.c.stats.sp, A.sp + 15);
       addGauge(A, 10);

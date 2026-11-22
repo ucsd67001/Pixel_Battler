@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Character } from '../game/types';
-import { loadHangar } from '../game/storage';
+import { useGarage } from '../game/garage';
 import { CPU_CHARACTER } from '../game/cpu';
 import { checkHealth, type Health } from '../lib/api';
 import { Showcase } from './StageView';
@@ -48,7 +48,7 @@ export function Title({
 }) {
   const peek = useRoomPeek();
   const waiting = peek?.players.length === 1;
-  const [hangar] = useState(loadHangar);
+  const hangar = useGarage().list;
   const [ai, setAi] = useState<Health | null>(null);
   useEffect(() => {
     checkHealth().then(setAi);

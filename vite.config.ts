@@ -68,6 +68,7 @@ function apiPlugin(env: Record<string, string>): Plugin {
         apiKey,
         model,
         cache,
+        hiddenRule: env.HIDDEN_RULE, // 手元で試すときだけ（.env か、起動するときの環境変数）
       });
       console.log(`[analyze] ${result.spec.motif} → ${result.spec.name}（${result.model}）`);
       send(res, 200, result);

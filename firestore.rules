@@ -1,5 +1,6 @@
 rules_version = '2';
 // ふつうは、画面から Firestore を直接読み書きしない（Cloud Functions＝管理者の権限だけが使う）。
+// ただしガレージ（users/{uid}/robots）は、本人だけが見て消せる。
 // ただし「ふたりで対戦」の部屋（rooms）は、Google でログインした人ならだれでも使える（2026-11-22 から）。
 // 知らない人どうしでも使うので、ほかの人の分を書きかえられないようにしておく：
 //   ・部屋にいる人（rooms/main/players/{uid}）は、自分の分だけ書ける。ほかの人の分は、3分より長くいなかった人のものだけ消せる
@@ -27,6 +28,10 @@ service cloud.firestore {
         allow read: if signedIn();
         allow create: if signedIn() && request.resource.data.by == request.auth.uid;
       }
+    }
+    // ガレージ（作ったロボ）：見る・消すのは本人だけ。入れるのはサーバーだけ（30体まで・数字はサーバーが計算する）
+    match /users/{uid}/robots/{robot} {
+      allow read, delete: if signedIn() && uid == request.auth.uid;
     }
     match /{document=**} {
       allow read, write: if false;

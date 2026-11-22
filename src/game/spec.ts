@@ -37,6 +37,7 @@ export const SPEC_JSON_SCHEMA = obj({
   skill: obj({ name: str, kind: en(SKILL_KINDS), description: str }),
   ultimate: obj({ name: str, style: en(ULT_STYLES), description: str, shout: str }),
   trait: en(TRAITS),
+  bonus: { type: 'integer', enum: [0, 1] },
 });
 
 function pick<T extends string>(v: unknown, list: readonly T[], fallback: T): T {
@@ -103,5 +104,6 @@ export function sanitizeSpec(raw: any): CharacterSpec {
       shout: text(r.ultimate?.shout, 24, 'いくぞ！'),
     },
     trait: pick(r.trait, TRAITS, 'fighter'),
+    bonus: r.bonus === 1 ? 1 : 0,
   };
 }

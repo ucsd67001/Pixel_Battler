@@ -502,8 +502,8 @@ export function Battle({
               <span className="cmd-sub">ATTACK</span>
             </button>
             <button className="cmd guard" data-sfx="select" disabled={!cmdOn} onClick={() => choose('guard')}>
-              <span className="cmd-main">ガード</span>
-              <span className="cmd-sub">{st.f[0].lastGuard ? 'ダメージ6割カット（続けると回復なし）' : 'ダメージ6割カット・HP回復'}</span>
+              <span className="cmd-main">ガード＆リペア</span>
+              <span className="cmd-sub">{st.f[0].lastGuard ? 'ダメージ6割カット・回復なし' : 'ダメージ6割カット・回復'}</span>
             </button>
             <button className="cmd skill" data-sfx="select" disabled={!cmdOn || !skillReady} onClick={() => choose('skill')}>
               <span className="cmd-main">{player.skill.name}</span>

@@ -5,7 +5,8 @@ import { AccessError, analyze, checkHealth, type Health } from '../lib/api';
 import { login, logout, useUser } from '../lib/firebase';
 import { localSpec } from '../game/fallback';
 import { buildCharacter } from '../game/stats';
-import { findBySeed, saveCharacter } from '../game/storage';
+import { GARAGE_FULL_MSG } from '../game/storage';
+import { GarageFullError, useGarage } from '../game/garage';
 import { CharacterCard } from './CharacterCard';
 import { Showcase } from './StageView';
 import { sfx } from '../lib/sfx';
@@ -32,6 +33,7 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
   const [drag, setDrag] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const user = useUser();
+  const garage = useGarage();
   const [health, setHealth] = useState<Health | null>(null);
   useEffect(() => {
     checkHealth().then(setHealth);
@@ -66,10 +68,14 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
     setPreview(img.dataUrl);
     setStep('scan');
     const started = performance.now();
-    let ch = findBySeed(img.hash);
+    let ch = garage.find(img.hash);
     let n = '';
     if (ch) {
       n = 'この写真からは、前にも同じロボが生まれています。';
+    } else if (garage.full) {
+      setError(GARAGE_FULL_MSG);
+      setStep('pick');
+      return;
     } else {
       try {
         const r = await analyze(img.dataUrl, img.hash);
@@ -84,7 +90,16 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
         ch = buildCharacter(localSpec(img.hash, img.colors), img.hash, 'local', img.thumb);
         n = 'AIにつながらなかったため、写真の色から組み立てました。';
       }
-      saveCharacter(ch);
+      try {
+        ch = await garage.add(ch);
+      } catch (e) {
+        if (e instanceof GarageFullError) {
+          setError(e.message);
+          setStep('pick');
+          return;
+        }
+        throw e;
+      }
     }
     const rest = 2800 - (performance.now() - started);
     if (rest > 0) await sleep(rest);
@@ -159,6 +174,7 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
           />
         </div>
         )}
+        {garage.full && !error && <div className="note">{GARAGE_FULL_MSG}</div>}
         {error && <div className="error">{error}</div>}
       </div>
     );
