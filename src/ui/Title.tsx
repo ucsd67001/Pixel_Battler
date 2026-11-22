@@ -25,7 +25,8 @@ export function Title({
       <Showcase spec={(latest ?? CPU_CHARACTER).spec} className="stage stage-bg" />
       <div className="title-overlay">
         <div className="logo">
-          <span className="logo-main">PIXEL BATTLER</span>
+          <span className="logo-en">PIXEL BATTLER</span>
+          <span className="logo-main">ピクセル・バトラー</span>
           <span className="logo-sub">写真から、相棒を組み上げろ。</span>
         </div>
         <div className="menu">

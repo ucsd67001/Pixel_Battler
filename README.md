@@ -1,4 +1,4 @@
-# PIXEL BATTLER
+# ピクセル・バトラー（PIXEL BATTLER）
 
 （はじめの仮の名前は SNAPGEAR。手元のフォルダ名 `snapgear` はそのまま）
 
