@@ -37,6 +37,10 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
     checkHealth().then(setHealth);
   }, []);
   const needLogin = !!health?.auth && user === null;
+  // ログインできたら、前に失敗したときの赤い文を消す
+  useEffect(() => {
+    if (user) setError((e) => (e.startsWith('ログインできませんでした') ? '' : e));
+  }, [user]);
 
   useEffect(() => {
     if (step !== 'scan') return;
@@ -109,7 +113,15 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
             <div className="dz-sub">写真から作れるのは、家族のアカウントだけです。</div>
             <button
               className="btn primary big"
-              onClick={() => login().catch((e) => setError(`ログインできませんでした（${(e as Error).message}）`))}
+              onClick={() => {
+                setError('');
+                login().catch((e) => {
+                  const code = String((e as { code?: string }).code ?? '');
+                  // 自分でログインの窓を閉じたときは、失敗として出さない
+                  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return;
+                  setError(`ログインできませんでした（${(e as Error).message}）`);
+                });
+              }}
             >
               Google でログインする
             </button>
