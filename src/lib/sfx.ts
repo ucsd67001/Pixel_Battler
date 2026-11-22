@@ -1,7 +1,13 @@
 // 効果音。音のファイルは使わず、ブラウザの Web Audio でその場で鳴らす（著作権の心配がない・軽い）。
 // ブラウザは、人が一度画面を触るまで音を出させないので、最初のクリックで目を覚ます（unlockAudio）。
-// 音の部品：tone（ふつうの音）・noise（ザーッという音）・metal（シャキーン）・shatter（ガシャーンの破片）・
-// trill（トゥルルルーン）・vib（ゆれながら伸びる音）。響き（rev）と、ざらつき（dist）と、左右（pan）を足せる。
+//
+// 音の作り（いまのゲームの音に寄せる。2026-11-22）：
+//   ・金属の「カーン」や、ガラスの「ガシャーン」、四角い波の「ピロピロ」は使わない（昔のコントやファミコンっぽく聞こえる）
+//   ・当たる音＝低く短い「ドスッ」（kick）＋こすれる音（ノイズを低いほうだけ通す）
+//   ・必殺技＝下から上がる「ためる音」（riser）→「ドーン」→映画の予告編のような低い「ブォーン」（braam）
+//   ・回復やゲージ＝やわらかい「ポロロン」（pluck）と、ふわっと広がる和音（pad）
+//   ・ボタン＝小さく軽い「コッ」
+// 音の高さは、ハ長調の五つの音（ドレミソラ）と、その和音にそろえる（どれが鳴っても、ぶつからない）。
 
 export type SfxName =
   | 'click' | 'select' | 'scan' | 'reveal' | 'ready' | 'fight' | 'land'
@@ -9,6 +15,12 @@ export type SfxName =
   | 'skill' | 'heal' | 'buff' | 'debuff' | 'counter' | 'cutin' | 'gauge'
   | 'charge' | 'beam' | 'slash' | 'boom' | 'ko' | 'win' | 'lose'
   | 'ultboom' | 'whoosh';
+
+export const SFX_NAMES: SfxName[] = [
+  'click', 'select', 'scan', 'reveal', 'ready', 'fight', 'land', 'swing', 'hit', 'crit', 'guard', 'shot', 'orb',
+  'skill', 'heal', 'buff', 'debuff', 'counter', 'cutin', 'gauge', 'charge', 'beam', 'slash', 'boom', 'ko', 'win',
+  'lose', 'ultboom', 'whoosh',
+];
 
 const MUTE_KEY = 'pixelbattler.muted';
 let muted = (() => {
@@ -18,63 +30,93 @@ let muted = (() => {
     return false;
   }
 })();
-let ctx: AudioContext | null = null;
-let master: GainNode;
-let noiseBuf: AudioBuffer;
-let reverb: GainNode; // 響き（広い場所で鳴っているように聞かせる）
-let crunch: GainNode; // ざらつき（爆発を、バリバリした音にする）
-const VOLUME = 0.55;
+const VOLUME = 0.6;
 
-function ac(): AudioContext | null {
-  if (!ctx) {
+// 音の通り道（ふつうに鳴らすときと、ファイルに書き出すときで、別々に作る）
+interface Bus {
+  c: BaseAudioContext;
+  master: GainNode;
+  reverb: GainNode; // 響き（広い場所で鳴っているように聞かせる。高い音は早く消える＝やわらかい響き）
+  warm: GainNode; // 少しだけ音をつぶして、太く聞かせる
+  noise: AudioBuffer;
+}
+
+function makeBus(c: BaseAudioContext, volume: number): Bus {
+  const master = c.createGain();
+  master.gain.value = volume;
+  const comp = c.createDynamicsCompressor();
+  comp.threshold.value = -16;
+  comp.knee.value = 12;
+  comp.ratio.value = 4;
+  comp.attack.value = 0.004;
+  comp.release.value = 0.2;
+  master.connect(comp);
+  comp.connect(c.destination);
+
+  const noise = c.createBuffer(2, c.sampleRate * 2, c.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = noise.getChannelData(ch);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+
+  // 響き：だんだん小さく、だんだんこもっていく雑音を「部屋の響き」として使う
+  const len = Math.floor(c.sampleRate * 2.8);
+  const ir = c.createBuffer(2, len, c.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const x = ir.getChannelData(ch);
+    let y = 0;
+    for (let i = 0; i < len; i++) {
+      const p = i / len;
+      const a = 0.85 * Math.pow(1 - p, 3) + 0.04; // 時間がたつほど高い音を通さない
+      y += a * (Math.random() * 2 - 1 - y);
+      x[i] = y * Math.pow(1 - p, 2.2) * (i < c.sampleRate * 0.012 ? i / (c.sampleRate * 0.012) : 1);
+    }
+  }
+  const conv = c.createConvolver();
+  conv.buffer = ir;
+  const reverb = c.createGain();
+  reverb.gain.value = 0.5;
+  const revHp = c.createBiquadFilter(); // 響きに低い音を入れない（もこもこしない）
+  revHp.type = 'highpass';
+  revHp.frequency.value = 180;
+  reverb.connect(revHp);
+  revHp.connect(conv);
+  conv.connect(master);
+
+  const shaper = c.createWaveShaper();
+  const curve = new Float32Array(1024);
+  for (let i = 0; i < curve.length; i++) {
+    const x = (i / (curve.length - 1)) * 2 - 1;
+    curve[i] = Math.tanh(x * 2.2) / Math.tanh(2.2);
+  }
+  shaper.curve = curve;
+  shaper.oversample = '2x';
+  const warm = c.createGain();
+  const after = c.createGain();
+  after.gain.value = 0.8;
+  warm.connect(shaper);
+  shaper.connect(after);
+  after.connect(master);
+
+  return { c, master, reverb, warm, noise };
+}
+
+let live: Bus | null = null;
+function bus(): Bus | null {
+  if (!live) {
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AC) return null;
-    ctx = new AC();
-    master = ctx.createGain();
-    master.gain.value = muted ? 0 : VOLUME;
-    const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -14;
-    comp.ratio.value = 6;
-    master.connect(comp);
-    comp.connect(ctx.destination);
-    noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-    const d = noiseBuf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    // 響き：だんだん小さくなる雑音を「部屋の響き」として使う
-    const len = Math.floor(ctx.sampleRate * 2.6);
-    const ir = ctx.createBuffer(2, len, ctx.sampleRate);
-    for (let ch = 0; ch < 2; ch++) {
-      const x = ir.getChannelData(ch);
-      for (let i = 0; i < len; i++) x[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6);
-    }
-    const conv = ctx.createConvolver();
-    conv.buffer = ir;
-    reverb = ctx.createGain();
-    reverb.gain.value = 0.55;
-    reverb.connect(conv);
-    conv.connect(master);
-    // ざらつき：音の山をつぶして、ひずませる
-    const shaper = ctx.createWaveShaper();
-    const curve = new Float32Array(1024);
-    for (let i = 0; i < curve.length; i++) {
-      const x = (i / (curve.length - 1)) * 2 - 1;
-      curve[i] = Math.tanh(x * 6);
-    }
-    shaper.curve = curve;
-    crunch = ctx.createGain();
-    const after = ctx.createGain();
-    after.gain.value = 0.35;
-    crunch.connect(shaper);
-    shaper.connect(after);
-    after.connect(master);
+    live = makeBus(new AC(), muted ? 0 : VOLUME);
   }
-  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-  return ctx;
+  const c = live.c as AudioContext;
+  if (c.state === 'suspended') c.resume().catch(() => {});
+  return live;
 }
 
 export function unlockAudio() {
   try {
-    ac();
+    const b = bus();
+    if (b) bgmSetup(b);
   } catch {
     /* 音が出せなくても遊べる */
   }
@@ -91,305 +133,472 @@ export function setMuted(v: boolean) {
   } catch {
     /* 覚えられなくてもよい */
   }
-  if (ctx) master.gain.setTargetAtTime(v ? 0 : VOLUME, ctx.currentTime, 0.02);
+  if (live) live.master.gain.setTargetAtTime(v ? 0 : VOLUME, live.c.currentTime, 0.02);
+  bgmLevel(bgmWant ? 1 : 0, 0.05);
 }
 
-// 出口：左右（pan）・ざらつき（dist）・響き（rev）
+// ── BGM（バトルのあいだ、くり返し流す曲） ──
+// iPhone の Safari では、ふつうのやり方だと音の大きさを変えられないので、効果音と同じ通り道（Web Audio）に流す。
+// スマホは、人が画面を触っているあいだに一度鳴らしておかないと、あとから鳴らせない。
+// だから、最初のタッチで音を0にしたまま一度鳴らして止めておく（bgmSetup）。
+const BGM_SRC = '/bgm/battle.mp3';
+const BGM_VOL = 0.3;
+let bgmEl: HTMLAudioElement | null = null;
+let bgmGain: GainNode | null = null;
+let bgmWant = false;
+let bgmDuck = 1;
+let bgmStopTimer = 0;
+let bgmDuckTimer = 0;
+
+function bgmSetup(b: Bus) {
+  if (bgmEl) return;
+  const el = new Audio(BGM_SRC);
+  el.loop = true;
+  el.preload = 'auto';
+  bgmEl = el;
+  try {
+    const c = b.c as AudioContext;
+    const src = c.createMediaElementSource(el);
+    bgmGain = c.createGain();
+    bgmGain.gain.value = 0;
+    src.connect(bgmGain);
+    bgmGain.connect(c.destination);
+  } catch {
+    bgmGain = null;
+    el.volume = 0;
+  }
+  if (!bgmWant)
+    el.play()
+      .then(() => {
+        if (!bgmWant) el.pause();
+      })
+      .catch(() => {});
+}
+
+// 大きさを変える（level：1＝ふつう、0＝無音。必殺技のあいだは bgmDuck で下げる）
+function bgmLevel(level: number, tc: number) {
+  const v = muted ? 0 : BGM_VOL * level * bgmDuck;
+  if (bgmGain && live) bgmGain.gain.setTargetAtTime(v, live.c.currentTime, tc);
+  else if (bgmEl) bgmEl.volume = Math.min(1, v);
+}
+
+/** バトルの曲を、頭からくり返し流す */
+export function playBgm() {
+  try {
+    bgmWant = true;
+    clearTimeout(bgmStopTimer);
+    const b = bus();
+    if (!b) return;
+    bgmSetup(b);
+    if (!bgmEl) return;
+    bgmEl.currentTime = 0;
+    bgmEl.play().catch(() => {});
+    bgmLevel(1, 0.15);
+  } catch {
+    /* 曲が流せなくても遊べる */
+  }
+}
+
+/** 曲を、だんだん小さくして止める */
+export function stopBgm(fade = 1.0) {
+  bgmWant = false;
+  bgmLevel(0, Math.max(0.01, fade / 4));
+  clearTimeout(bgmStopTimer);
+  bgmStopTimer = window.setTimeout(() => {
+    if (!bgmWant) bgmEl?.pause();
+  }, fade * 1000 + 100);
+}
+
+// 必殺技の「ドーン」のあいだだけ、曲を小さくする
+function duckBgm(sec: number) {
+  if (!bgmWant) return;
+  bgmDuck = 0.3;
+  bgmLevel(1, 0.05);
+  clearTimeout(bgmDuckTimer);
+  bgmDuckTimer = window.setTimeout(() => {
+    bgmDuck = 1;
+    if (bgmWant) bgmLevel(1, 0.4);
+  }, sec * 1000);
+}
+const DUCK: Partial<Record<SfxName, number>> = { cutin: 2.6, ultboom: 2.2, charge: 1.6 };
+
+// ── 出口：左右（pan）・太さ（warm）・響き（rev） ──
 interface Out {
   rev?: number;
   pan?: number;
-  dist?: boolean;
+  warm?: boolean;
+  at?: number;
 }
-function out(c: AudioContext, g: GainNode, o: Out) {
+function out(b: Bus, g: AudioNode, o: Out) {
   let node: AudioNode = g;
-  if (o.pan && c.createStereoPanner) {
-    const p = c.createStereoPanner();
+  if (o.pan) {
+    const p = b.c.createStereoPanner();
     p.pan.value = Math.max(-1, Math.min(1, o.pan));
     g.connect(p);
     node = p;
   }
-  node.connect(o.dist ? crunch : master);
-  if (o.rev && reverb) {
-    const s = c.createGain();
+  node.connect(o.warm ? b.warm : b.master);
+  if (o.rev) {
+    const s = b.c.createGain();
     s.gain.value = o.rev;
     node.connect(s);
-    s.connect(reverb);
+    s.connect(b.reverb);
   }
 }
+const T = (b: Bus, at?: number) => b.c.currentTime + (at ?? 0);
 
-interface ToneOpt extends Out {
-  f: number;
-  to?: number;
-  dur: number;
-  type?: OscillatorType;
-  vol?: number;
-  at?: number;
-  attack?: number;
+/** 音の大きさの形：すぐ（または attack かけて）大きくなり、hold まで保って、dur で消える */
+function env(g: GainNode, t: number, vol: number, dur: number, attack = 0.004, hold = 0) {
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(Math.max(vol, 0.0002), t + attack);
+  if (hold > attack) g.gain.setValueAtTime(Math.max(vol, 0.0002), t + hold);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
 }
-function tone(c: AudioContext, o: ToneOpt) {
-  const t = c.currentTime + (o.at ?? 0);
-  const osc = c.createOscillator();
+
+// ── 部品 ──
+
+// ふつうの音（なめらかな波だけ。四角い波は使わない）
+function tone(b: Bus, o: Out & { f: number; to?: number; dur: number; vol: number; type?: OscillatorType; attack?: number; glide?: number }) {
+  const t = T(b, o.at);
+  const osc = b.c.createOscillator();
   osc.type = o.type ?? 'sine';
   osc.frequency.setValueAtTime(o.f, t);
-  if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t + o.dur);
-  const g = c.createGain();
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(o.vol ?? 0.3, t + (o.attack ?? 0.005));
-  g.gain.exponentialRampToValueAtTime(0.0001, t + o.dur);
+  if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t + (o.glide ?? o.dur));
+  const g = b.c.createGain();
+  env(g, t, o.vol, o.dur, o.attack);
   osc.connect(g);
-  out(c, g, o);
+  out(b, g, o);
   osc.start(t);
   osc.stop(t + o.dur + 0.05);
 }
 
-interface NoiseOpt extends Out {
-  dur: number;
-  vol?: number;
-  type?: BiquadFilterType;
-  f?: number;
-  to?: number;
-  q?: number;
-  at?: number;
-  attack?: number;
-}
-function noise(c: AudioContext, o: NoiseOpt) {
-  const t = c.currentTime + (o.at ?? 0);
-  const src = c.createBufferSource();
-  src.buffer = noiseBuf;
+// ザーッという音を、通す高さを動かしながら鳴らす
+function noise(
+  b: Bus,
+  o: Out & { dur: number; vol: number; type?: BiquadFilterType; f?: number; to?: number; q?: number; attack?: number; panTo?: number },
+) {
+  const t = T(b, o.at);
+  const src = b.c.createBufferSource();
+  src.buffer = b.noise;
   src.loop = true;
-  const fl = c.createBiquadFilter();
+  const fl = b.c.createBiquadFilter();
   fl.type = o.type ?? 'lowpass';
   fl.frequency.setValueAtTime(o.f ?? 1200, t);
   if (o.to) fl.frequency.exponentialRampToValueAtTime(o.to, t + o.dur);
-  fl.Q.value = o.q ?? 0.8;
-  const g = c.createGain();
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(o.vol ?? 0.3, t + (o.attack ?? 0.005));
-  g.gain.exponentialRampToValueAtTime(0.0001, t + o.dur);
+  fl.Q.value = o.q ?? 0.7;
+  const g = b.c.createGain();
+  env(g, t, o.vol, o.dur, o.attack);
   src.connect(fl);
   fl.connect(g);
-  out(c, g, o);
-  src.start(t, Math.random() * 0.5);
+  if (o.panTo !== undefined) {
+    // 左から右へ流れる（「シュッ」が通りすぎる）
+    const p = b.c.createStereoPanner();
+    p.pan.setValueAtTime(o.pan ?? 0, t);
+    p.pan.linearRampToValueAtTime(o.panTo, t + o.dur);
+    g.connect(p);
+    out(b, p as unknown as GainNode, { rev: o.rev, warm: o.warm });
+  } else out(b, g, o);
+  src.start(t, Math.random() * 1.5);
   src.stop(t + o.dur + 0.05);
 }
 
-const arp = (c: AudioContext, notes: number[], step: number, dur: number, type: OscillatorType, vol: number, at = 0, rev = 0) =>
-  notes.forEach((f, i) => tone(c, { f, dur, type, vol, at: at + i * step, rev }));
-
-// ゆれながら伸びる音（「ーン」の部分）
-function vib(c: AudioContext, o: { f: number; dur: number; vol: number; at?: number; rev?: number; type?: OscillatorType }) {
-  const t = c.currentTime + (o.at ?? 0);
-  const osc = c.createOscillator();
-  osc.type = o.type ?? 'triangle';
-  osc.frequency.setValueAtTime(o.f, t);
-  const lfo = c.createOscillator();
-  lfo.frequency.value = 6.5;
-  const depth = c.createGain();
-  depth.gain.setValueAtTime(0, t);
-  depth.gain.linearRampToValueAtTime(o.f * 0.015, t + o.dur * 0.4);
-  lfo.connect(depth);
-  depth.connect(osc.frequency);
-  const g = c.createGain();
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(o.vol, t + 0.01);
-  g.gain.setValueAtTime(o.vol, t + o.dur * 0.35);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + o.dur);
+// 「ドスッ」：低い音が一瞬で下がる（いまのゲームの打撃の芯）＋出だしの小さな「パチッ」
+function kick(b: Bus, o: Out & { f?: number; to?: number; dur: number; vol: number; drop?: number }) {
+  const t = T(b, o.at);
+  const osc = b.c.createOscillator();
+  osc.frequency.setValueAtTime(o.f ?? 150, t);
+  osc.frequency.exponentialRampToValueAtTime(o.to ?? 45, t + (o.drop ?? Math.min(0.12, o.dur * 0.4)));
+  const g = b.c.createGain();
+  env(g, t, o.vol, o.dur, 0.002);
   osc.connect(g);
-  out(c, g, { rev: o.rev });
+  out(b, g, o);
   osc.start(t);
-  lfo.start(t);
   osc.stop(t + o.dur + 0.05);
-  lfo.stop(t + o.dur + 0.05);
+  noise(b, { dur: 0.018, vol: o.vol * 0.22, type: 'highpass', f: 2500, at: o.at, pan: o.pan });
 }
 
-// 「シャキーン」：きれいに重ならない高い音をいくつも重ねて、長く響かせる（金属の鳴り）
-function metal(c: AudioContext, o: { f: number; dur: number; vol: number; at?: number; rev?: number; pan?: number }) {
-  [1, 1.483, 2.09, 2.563, 3.217, 4.1].forEach((m, i) =>
-    tone(c, {
-      f: o.f * m * (1 + (Math.random() - 0.5) * 0.004),
-      dur: o.dur * (1 - i * 0.1),
-      vol: o.vol / (1 + i * 0.55),
-      at: o.at,
-      attack: 0.002,
-      rev: o.rev,
-      pan: o.pan,
-    }),
-  );
-  // 出だしの「シャッ」
-  noise(c, { dur: 0.09, vol: o.vol * 1.4, type: 'highpass', f: 5000, at: o.at, rev: o.rev, pan: o.pan });
+// 「ポロン」：やわらかくはじく音（はじめ明るく、すぐこもる）
+function pluck(b: Bus, o: Out & { f: number; dur: number; vol: number }) {
+  const t = T(b, o.at);
+  const fl = b.c.createBiquadFilter();
+  fl.type = 'lowpass';
+  fl.Q.value = 1.2;
+  fl.frequency.setValueAtTime(Math.min(o.f * 7, 16000), t);
+  fl.frequency.exponentialRampToValueAtTime(o.f * 1.3, t + o.dur * 0.6);
+  const g = b.c.createGain();
+  env(g, t, o.vol, o.dur, 0.003);
+  fl.connect(g);
+  out(b, g, o);
+  for (const [type, m, d] of [['sawtooth', 1, -6], ['sawtooth', 1, 6], ['sine', 2, 0]] as const) {
+    const osc = b.c.createOscillator();
+    osc.type = type;
+    osc.frequency.value = o.f * m;
+    osc.detune.value = d;
+    osc.connect(fl);
+    osc.start(t);
+    osc.stop(t + o.dur + 0.05);
+  }
 }
 
-// 「ガシャーン」の破片：高い音の粒を、左右に散らばらせる
-function shatter(c: AudioContext, o: { count: number; spread: number; vol: number; at?: number; rev?: number }) {
+// ふわっと広がる和音（少しずらした波を重ねて、厚く聞かせる）。cutPeak で「ブワッ」と開いて閉じる
+function pad(
+  b: Bus,
+  o: Out & {
+    freqs: number[];
+    dur: number;
+    vol: number;
+    attack?: number;
+    hold?: number;
+    cut?: number;
+    cutPeak?: number;
+    peakAt?: number;
+    cutTo?: number;
+    bend?: number;
+    detune?: number;
+    type?: OscillatorType;
+    wobble?: number;
+  },
+) {
+  const t = T(b, o.at);
+  const fl = b.c.createBiquadFilter();
+  fl.type = 'lowpass';
+  fl.Q.value = 0.9;
+  const cut = o.cut ?? 1200;
+  fl.frequency.setValueAtTime(cut, t);
+  if (o.cutPeak) {
+    fl.frequency.exponentialRampToValueAtTime(o.cutPeak, t + (o.peakAt ?? 0.08));
+    fl.frequency.exponentialRampToValueAtTime(o.cutTo ?? cut, t + o.dur);
+  } else if (o.cutTo) fl.frequency.exponentialRampToValueAtTime(o.cutTo, t + o.dur);
+  if (o.wobble) {
+    // 「ウォンウォン」とうなる（ビームのエネルギー）
+    const lfo = b.c.createOscillator();
+    lfo.frequency.value = o.wobble;
+    const depth = b.c.createGain();
+    depth.gain.value = cut * 0.6;
+    lfo.connect(depth);
+    depth.connect(fl.frequency);
+    lfo.start(t);
+    lfo.stop(t + o.dur + 0.05);
+  }
+  const g = b.c.createGain();
+  const n = o.freqs.length;
+  env(g, t, o.vol / Math.sqrt(n * 2), o.dur, o.attack ?? 0.03, o.hold ?? o.dur * 0.45);
+  fl.connect(g);
+  out(b, g, o);
+  const det = o.detune ?? 10;
+  for (const f of o.freqs)
+    for (const d of [-det, det]) {
+      const osc = b.c.createOscillator();
+      osc.type = o.type ?? 'sawtooth';
+      osc.frequency.setValueAtTime(f, t);
+      if (o.bend) osc.frequency.exponentialRampToValueAtTime(f * o.bend, t + o.dur);
+      osc.detune.value = d;
+      osc.connect(fl);
+      osc.start(t);
+      osc.stop(t + o.dur + 0.05);
+    }
+}
+
+// 下から上がっていく「ためる音」：ザーッが高くなり、和音もいっしょにせり上がる（最後に向かって大きくなる）
+function riser(b: Bus, o: { dur: number; vol: number; at?: number; f?: number }) {
+  noise(b, { dur: o.dur, vol: o.vol, type: 'bandpass', f: 250, to: 7000, q: 1.1, attack: o.dur * 0.92, at: o.at, rev: 0.35, pan: -0.5, panTo: 0.5 });
+  const f = o.f ?? 110;
+  pad(b, { freqs: [f, f * 1.5], dur: o.dur, vol: o.vol * 0.55, attack: o.dur * 0.92, hold: o.dur * 0.92, cut: 250, cutTo: 3500, bend: 2, at: o.at, rev: 0.3 });
+}
+
+// 映画の予告編のような低い「ブォーン」：太い低音が一度ぱっと開いて、ゆっくり閉じる
+function braam(b: Bus, o: { f: number; dur: number; vol: number; at?: number; rev?: number }) {
+  pad(b, { freqs: [o.f, o.f * 2, o.f * 3], dur: o.dur, vol: o.vol, attack: 0.02, hold: 0.15, cut: 180, cutPeak: 1600, peakAt: 0.09, cutTo: 120, detune: 18, at: o.at, rev: o.rev ?? 0.6, warm: true });
+  tone(b, { f: o.f, dur: o.dur, vol: o.vol * 0.8, at: o.at, attack: 0.02 });
+}
+
+// 空気がゆれる「シュワーン」：高いところのやわらかいザーッ（キラッと光る感じ）
+function air(b: Bus, o: { dur: number; vol: number; at?: number; rev?: number }) {
+  noise(b, { dur: o.dur, vol: o.vol, type: 'highpass', f: 6000, to: 9000, attack: o.dur * 0.15, at: o.at, rev: o.rev ?? 0.6 });
+}
+
+// ドレミソラ（ハ長調の五つの音）
+const PENTA = [0, 2, 4, 7, 9];
+const note = (base: number, i: number) => base * Math.pow(2, (PENTA[((i % 5) + 5) % 5] + 12 * Math.floor(i / 5)) / 12);
+
+// キラキラ：ドレミソラの高い「ポロン」を、ばらばらの時間と左右に散らす
+function sparkle(b: Bus, o: { base: number; count: number; spread: number; vol: number; at?: number; rev?: number }) {
   for (let i = 0; i < o.count; i++) {
     const r = Math.random();
-    tone(c, {
-      f: 2200 + Math.random() * 6500,
-      dur: 0.06 + Math.random() * 0.3,
-      vol: o.vol * (0.35 + Math.random() * 0.65),
-      at: (o.at ?? 0) + r * r * o.spread,
-      attack: 0.001,
-      rev: o.rev,
+    pluck(b, {
+      f: note(o.base, Math.floor(Math.random() * 8)),
+      dur: 0.25 + Math.random() * 0.25,
+      vol: o.vol * (0.4 + Math.random() * 0.6),
+      at: (o.at ?? 0) + r * o.spread,
       pan: Math.random() * 1.6 - 0.8,
-      type: Math.random() < 0.3 ? 'triangle' : 'sine',
+      rev: o.rev ?? 0.7,
     });
   }
 }
 
-// 「トゥルルルーン」：五つの音の並び（ドレミソラ）で速く駆け上がって、最後を伸ばしてゆらす
-function trill(c: AudioContext, o: { base: number; steps: number; step: number; at?: number; vol?: number; rev?: number; end?: number }) {
-  const scale = [0, 2, 4, 7, 9];
+// 「トゥルルルーン」：やわらかいポロンで速く駆け上がり、最後をふわっと広げる
+function rise(b: Bus, o: { base: number; steps: number; step: number; at?: number; vol: number; rev?: number; end?: number }) {
   const at = o.at ?? 0;
-  const vol = o.vol ?? 0.05;
-  const note = (i: number) => o.base * Math.pow(2, (scale[i % 5] + 12 * Math.floor(i / 5)) / 12);
-  for (let i = 0; i < o.steps; i++) {
-    const f = note(i);
-    tone(c, { f, dur: 0.14, type: 'square', vol, at: at + i * o.step, rev: o.rev, pan: (i / o.steps - 0.5) * 0.8 });
-    tone(c, { f: f * 2, dur: 0.12, type: 'triangle', vol: vol * 0.6, at: at + i * o.step, rev: o.rev });
-  }
-  const last = note(o.steps);
+  for (let i = 0; i < o.steps; i++)
+    pluck(b, { f: note(o.base, i), dur: 0.3, vol: o.vol, at: at + i * o.step, rev: o.rev, pan: (i / o.steps - 0.5) * 0.9 });
+  const top = note(o.base, o.steps);
   const t = at + o.steps * o.step;
-  vib(c, { f: last, dur: o.end ?? 1.1, vol: vol * 1.6, at: t, rev: o.rev });
-  vib(c, { f: last * 2, dur: (o.end ?? 1.1) * 0.8, vol: vol * 0.7, at: t, rev: o.rev, type: 'sine' });
-  // キラキラ
-  shatter(c, { count: 8, spread: 0.5, vol: vol * 0.6, at: t, rev: o.rev });
+  const end = o.end ?? 1.0;
+  pad(b, { freqs: [top / 2, (top / 2) * 1.25, (top / 2) * 1.5, top], dur: end, vol: o.vol * 1.6, attack: 0.02, cut: 5000, cutTo: 900, at: t, rev: o.rev });
+  air(b, { dur: end * 0.8, vol: o.vol * 0.5, at: t, rev: o.rev });
 }
 
-const SOUNDS: Record<SfxName, (c: AudioContext) => void> = {
-  click: (c) => tone(c, { f: 880, to: 1320, dur: 0.06, type: 'square', vol: 0.05 }),
-  select: (c) => {
-    tone(c, { f: 660, dur: 0.07, type: 'triangle', vol: 0.12 });
-    tone(c, { f: 990, dur: 0.09, type: 'triangle', vol: 0.1, at: 0.045 });
-    metal(c, { f: 2400, dur: 0.25, vol: 0.025, at: 0.04, rev: 0.2 });
+// ── 音の一覧 ──
+const C = 130.81; // ド（下のほう）
+const SOUNDS: Record<SfxName, (b: Bus) => void> = {
+  // ボタン：小さく軽い「コッ」
+  click: (b) => tone(b, { f: 1100, to: 700, dur: 0.045, vol: 0.09, glide: 0.03 }),
+  select: (b) => {
+    tone(b, { f: 1320, to: 990, dur: 0.06, vol: 0.09, glide: 0.04 });
+    pluck(b, { f: 1568, dur: 0.18, vol: 0.05, at: 0.035, rev: 0.25 });
   },
-  scan: (c) => {
-    tone(c, { f: 1200, dur: 0.05, vol: 0.06 });
-    tone(c, { f: 1800, dur: 0.06, vol: 0.05, at: 0.05 });
+  scan: (b) => {
+    tone(b, { f: 1568, dur: 0.05, vol: 0.05, rev: 0.2 });
+    tone(b, { f: 2093, dur: 0.06, vol: 0.04, at: 0.06, rev: 0.2 });
   },
-  // ロボが生まれる：ためて、ドン、トゥルルルーン
-  reveal: (c) => {
-    noise(c, { dur: 0.7, vol: 0.18, type: 'highpass', f: 300, to: 6000, attack: 0.4, rev: 0.3 });
-    tone(c, { f: 90, to: 35, dur: 0.8, vol: 0.45, at: 0.4 });
-    trill(c, { base: 523, steps: 12, step: 0.035, at: 0.4, vol: 0.05, rev: 0.6, end: 1.3 });
+  // ロボが生まれる：ためて → ドン → ふわっと和音が広がる
+  reveal: (b) => {
+    riser(b, { dur: 0.6, vol: 0.2, f: C });
+    kick(b, { f: 140, to: 40, dur: 0.7, vol: 0.7, at: 0.58 });
+    noise(b, { dur: 0.8, vol: 0.25, f: 1500, to: 120, at: 0.58, rev: 0.4 });
+    pad(b, { freqs: [C * 2, C * 2.5, C * 3, C * 3.75, C * 4.5], dur: 2.0, vol: 0.22, attack: 0.03, cut: 4000, cutTo: 700, at: 0.6, rev: 0.7 });
+    sparkle(b, { base: C * 8, count: 10, spread: 0.9, vol: 0.05, at: 0.62 });
   },
-  ready: (c) => {
-    tone(c, { f: 110, to: 220, dur: 0.7, type: 'sawtooth', vol: 0.06, attack: 0.3 });
-    noise(c, { dur: 0.7, vol: 0.08, type: 'bandpass', f: 300, to: 2000, attack: 0.4 });
+  ready: (b) => riser(b, { dur: 0.75, vol: 0.14, f: 98 }),
+  // FIGHT!：ドーン＋ブォーン＋シュッ
+  fight: (b) => {
+    kick(b, { f: 160, to: 38, dur: 0.9, vol: 0.85 });
+    braam(b, { f: 55, dur: 1.2, vol: 0.32 });
+    noise(b, { dur: 0.5, vol: 0.3, f: 2500, to: 100, rev: 0.4 });
+    air(b, { dur: 0.9, vol: 0.06 });
   },
-  fight: (c) => {
-    noise(c, { dur: 0.55, vol: 0.35, f: 3000, to: 250, dist: true });
-    tone(c, { f: 160, to: 45, dur: 0.45, type: 'square', vol: 0.16 });
-    metal(c, { f: 1500, dur: 1.0, vol: 0.09, rev: 0.6 });
+  land: (b) => {
+    kick(b, { f: 110, to: 38, dur: 0.35, vol: 0.55 });
+    noise(b, { dur: 0.25, vol: 0.2, f: 700, to: 120 });
   },
-  land: (c) => {
-    tone(c, { f: 120, to: 40, dur: 0.28, vol: 0.4 });
-    noise(c, { dur: 0.22, vol: 0.2, f: 900, to: 150 });
+  // 武器をふる：「ヒュッ」が左から右へ
+  swing: (b) =>
+    noise(b, { dur: 0.22, vol: 0.28, type: 'bandpass', f: 600, to: 3200, q: 1.6, attack: 0.08, pan: -0.4, panTo: 0.4, rev: 0.15 }),
+  // 当たる：「ドスッ」
+  hit: (b) => {
+    kick(b, { f: 170, to: 52, dur: 0.22, vol: 0.7 });
+    noise(b, { dur: 0.13, vol: 0.32, f: 2200, to: 300, warm: true });
+    noise(b, { dur: 0.05, vol: 0.12, type: 'bandpass', f: 3500, q: 1.5 });
   },
-  swing: (c) => noise(c, { dur: 0.2, vol: 0.22, type: 'bandpass', f: 500, to: 3500, q: 1.4, attack: 0.04 }),
-  hit: (c) => {
-    tone(c, { f: 190, to: 60, dur: 0.18, vol: 0.45 });
-    noise(c, { dur: 0.14, vol: 0.28, f: 2600, to: 400 });
+  // 会心の一撃：重い「ドゴッ」＋短い「ジャン」
+  crit: (b) => {
+    kick(b, { f: 190, to: 40, dur: 0.45, vol: 0.9 });
+    noise(b, { dur: 0.3, vol: 0.45, f: 4500, to: 200, warm: true, rev: 0.3 });
+    pad(b, { freqs: [C * 2, C * 3, C * 4.5], dur: 0.45, vol: 0.2, attack: 0.005, cut: 6000, cutTo: 400, rev: 0.5 });
+    air(b, { dur: 0.4, vol: 0.06, rev: 0.4 });
   },
-  crit: (c) => {
-    tone(c, { f: 220, to: 45, dur: 0.3, vol: 0.55 });
-    noise(c, { dur: 0.25, vol: 0.4, f: 5000, to: 300, dist: true });
-    shatter(c, { count: 10, spread: 0.2, vol: 0.05, rev: 0.3 });
-    metal(c, { f: 1900, dur: 0.4, vol: 0.05, rev: 0.3 });
+  // ガード：エネルギーの盾に当たる「ブゥン」
+  guard: (b) => {
+    kick(b, { f: 220, to: 90, dur: 0.18, vol: 0.4 });
+    pad(b, { freqs: [196, 294], dur: 0.45, vol: 0.18, attack: 0.005, cut: 400, cutPeak: 2600, peakAt: 0.03, cutTo: 250, detune: 25, rev: 0.4 });
+    noise(b, { dur: 0.12, vol: 0.1, type: 'bandpass', f: 1800, q: 3 });
   },
-  guard: (c) => {
-    metal(c, { f: 900, dur: 0.5, vol: 0.08, rev: 0.3 });
-    noise(c, { dur: 0.08, vol: 0.15, type: 'bandpass', f: 3200, q: 2 });
+  // 撃つ：「ピュン」（なめらかな波）＋小さなドン
+  shot: (b) => {
+    tone(b, { f: 2200, to: 260, dur: 0.16, vol: 0.12, glide: 0.12, rev: 0.2 });
+    kick(b, { f: 130, to: 60, dur: 0.12, vol: 0.3 });
   },
-  shot: (c) => {
-    tone(c, { f: 1700, to: 280, dur: 0.14, type: 'square', vol: 0.08 });
-    noise(c, { dur: 0.06, vol: 0.08, type: 'highpass', f: 4000 });
+  orb: (b) => {
+    tone(b, { f: 392, to: 1046, dur: 0.35, vol: 0.12, rev: 0.4 });
+    tone(b, { f: 587, to: 1568, dur: 0.3, type: 'triangle', vol: 0.06, at: 0.05, rev: 0.4 });
   },
-  orb: (c) => {
-    tone(c, { f: 400, to: 950, dur: 0.35, vol: 0.14, rev: 0.3 });
-    tone(c, { f: 600, to: 1300, dur: 0.3, type: 'triangle', vol: 0.07, at: 0.05, rev: 0.3 });
+  // スキル：シュッと集めて、ブワッと光る
+  skill: (b) => {
+    noise(b, { dur: 0.28, vol: 0.22, type: 'bandpass', f: 400, to: 6000, q: 1.1, attack: 0.24, pan: -0.5, panTo: 0.5, rev: 0.3 });
+    pad(b, { freqs: [C * 2, C * 3, C * 4, C * 5], dur: 1.0, vol: 0.22, attack: 0.01, cut: 300, cutPeak: 5000, peakAt: 0.06, cutTo: 600, at: 0.26, rev: 0.6 });
+    kick(b, { f: 130, to: 45, dur: 0.4, vol: 0.45, at: 0.26 });
+    sparkle(b, { base: C * 8, count: 5, spread: 0.4, vol: 0.04, at: 0.28 });
   },
-  // スキル：シャキーン
-  skill: (c) => {
-    noise(c, { dur: 0.25, vol: 0.18, type: 'bandpass', f: 800, to: 7000, q: 1, attack: 0.12 });
-    metal(c, { f: 1700, dur: 1.1, vol: 0.11, at: 0.12, rev: 0.7 });
+  heal: (b) => rise(b, { base: C * 4, steps: 7, step: 0.055, vol: 0.06, rev: 0.6, end: 0.9 }),
+  buff: (b) => {
+    riser(b, { dur: 0.3, vol: 0.12, f: C });
+    rise(b, { base: C * 4, steps: 5, step: 0.04, at: 0.25, vol: 0.06, rev: 0.5, end: 0.6 });
   },
-  heal: (c) => trill(c, { base: 784, steps: 7, step: 0.06, vol: 0.04, rev: 0.6, end: 0.8 }),
-  buff: (c) => {
-    tone(c, { f: 300, to: 900, dur: 0.35, type: 'triangle', vol: 0.1 });
-    trill(c, { base: 659, steps: 6, step: 0.04, at: 0.1, vol: 0.04, rev: 0.5, end: 0.6 });
+  // 弱める：下がっていく、こもった音
+  debuff: (b) => {
+    pad(b, { freqs: [C * 2, C * 2.38], dur: 0.7, vol: 0.18, attack: 0.02, cut: 2500, cutTo: 200, bend: 0.5, rev: 0.4 });
+    tone(b, { f: 330, to: 110, dur: 0.6, vol: 0.12, at: 0.03 });
   },
-  debuff: (c) => {
-    tone(c, { f: 700, to: 160, dur: 0.6, type: 'sawtooth', vol: 0.06, rev: 0.4 });
-    tone(c, { f: 520, to: 120, dur: 0.6, type: 'triangle', vol: 0.08, at: 0.04 });
+  // カウンター：「シュッ」→「ドスッ」
+  counter: (b) => {
+    noise(b, { dur: 0.14, vol: 0.3, type: 'bandpass', f: 800, to: 5000, q: 1.3, attack: 0.1, pan: 0.4, panTo: -0.4 });
+    kick(b, { f: 180, to: 50, dur: 0.28, vol: 0.75, at: 0.12 });
+    pad(b, { freqs: [C * 3, C * 4.5], dur: 0.35, vol: 0.14, attack: 0.005, cut: 5000, cutTo: 500, at: 0.12, rev: 0.4 });
   },
-  counter: (c) => {
-    metal(c, { f: 1300, dur: 0.8, vol: 0.1, rev: 0.5 });
-    tone(c, { f: 220, dur: 0.12, type: 'square', vol: 0.08 });
-  },
-  // 必殺技のカットイン：シャキーンンン！（低いドンと和音も重ねる）
-  cutin: (c) => {
-    noise(c, { dur: 0.18, vol: 0.3, type: 'bandpass', f: 600, to: 9000, q: 0.9, attack: 0.1 });
-    metal(c, { f: 1250, dur: 2.2, vol: 0.2, at: 0.14, rev: 1.0, pan: -0.25 });
-    metal(c, { f: 1876, dur: 1.8, vol: 0.12, at: 0.16, rev: 1.0, pan: 0.25 });
-    tone(c, { f: 65, to: 38, dur: 1.2, vol: 0.5, at: 0.14 });
-    noise(c, { dur: 0.4, vol: 0.3, f: 3000, to: 200, at: 0.14, dist: true });
-    [220, 330, 440, 554, 659].forEach((f, i) =>
-      tone(c, { f, dur: 1.6, type: i < 2 ? 'sawtooth' : 'square', vol: i < 2 ? 0.04 : 0.02, at: 0.14, rev: 0.8 }),
-    );
+  // 必殺技のカットイン：ためて → ドーン → ブォーン＋ブワッと広がる和音
+  cutin: (b) => {
+    riser(b, { dur: 0.16, vol: 0.18, f: 110 });
+    kick(b, { f: 170, to: 34, dur: 1.2, vol: 0.95, at: 0.14, drop: 0.16 });
+    braam(b, { f: 55, dur: 2.0, vol: 0.42, at: 0.14, rev: 0.8 });
+    pad(b, { freqs: [220, 330, 440, 494, 587, 659], dur: 1.8, vol: 0.2, attack: 0.01, cut: 600, cutPeak: 7000, peakAt: 0.1, cutTo: 900, at: 0.14, rev: 0.9 });
+    noise(b, { dur: 0.5, vol: 0.32, f: 3500, to: 120, at: 0.14, warm: true, rev: 0.5 });
+    noise(b, { dur: 0.35, vol: 0.18, type: 'bandpass', f: 1500, to: 8000, q: 0.9, attack: 0.05, at: 0.14, pan: -0.7, panTo: 0.7, rev: 0.6 });
+    air(b, { dur: 1.6, vol: 0.08, at: 0.16, rev: 0.9 });
   },
   // 必殺ゲージがたまった：トゥルルルーン
-  gauge: (c) => trill(c, { base: 659, steps: 10, step: 0.032, vol: 0.05, rev: 0.6, end: 1.0 }),
-  // ためる：地ひびきと上がっていくうなり、最後にトゥルルルーン
-  charge: (c) => {
-    tone(c, { f: 45, dur: 1.6, vol: 0.35, attack: 0.5 });
-    tone(c, { f: 80, to: 520, dur: 1.4, type: 'sawtooth', vol: 0.07, attack: 0.8, rev: 0.3 });
-    noise(c, { dur: 1.4, vol: 0.18, type: 'bandpass', f: 150, to: 4000, attack: 1.0, rev: 0.4 });
-    trill(c, { base: 392, steps: 14, step: 0.03, at: 0.5, vol: 0.04, rev: 0.6, end: 0.6 });
+  gauge: (b) => rise(b, { base: C * 4, steps: 10, step: 0.035, vol: 0.06, rev: 0.6, end: 1.1 }),
+  // ためる：地ひびき＋せり上がる音＋最後にトゥルルルーン
+  charge: (b) => {
+    tone(b, { f: 41, dur: 1.6, vol: 0.4, attack: 0.5 });
+    riser(b, { dur: 1.4, vol: 0.2, f: 82 });
+    rise(b, { base: C * 2, steps: 12, step: 0.04, at: 0.9, vol: 0.045, rev: 0.6, end: 0.6 });
   },
-  beam: (c) => {
-    noise(c, { dur: 1.6, vol: 0.45, f: 1200, attack: 0.02, rev: 0.4 });
-    noise(c, { dur: 1.5, vol: 0.2, type: 'bandpass', f: 600, q: 0.7, attack: 0.02, dist: true });
-    tone(c, { f: 60, dur: 1.6, type: 'sawtooth', vol: 0.2, rev: 0.3 });
-    tone(c, { f: 2400, to: 900, dur: 1.4, type: 'sawtooth', vol: 0.04, rev: 0.4 });
-    metal(c, { f: 1100, dur: 1.2, vol: 0.08, rev: 0.6 });
+  // ビーム：太くうなるエネルギー＋低い地鳴り
+  beam: (b) => {
+    pad(b, { freqs: [55, 82.5, 110], dur: 1.6, vol: 0.38, attack: 0.03, cut: 700, cutTo: 300, wobble: 11, detune: 20, rev: 0.4, warm: true });
+    noise(b, { dur: 1.6, vol: 0.3, f: 1600, to: 500, attack: 0.03, rev: 0.4, pan: -0.3, panTo: 0.3 });
+    tone(b, { f: 55, dur: 1.6, vol: 0.35, attack: 0.03 });
+    air(b, { dur: 1.4, vol: 0.06, rev: 0.5 });
   },
-  // 斬る：ザシュッ＋シャキーン
-  slash: (c) => {
-    noise(c, { dur: 0.3, vol: 0.45, type: 'bandpass', f: 900, to: 8000, q: 1.2, attack: 0.02, rev: 0.4 });
-    metal(c, { f: 2000, dur: 1.2, vol: 0.13, at: 0.03, rev: 0.8 });
+  // 斬る：鋭い「シュバッ」＋「ドスッ」＋光る和音
+  slash: (b) => {
+    noise(b, { dur: 0.22, vol: 0.45, type: 'bandpass', f: 1200, to: 9000, q: 1.4, attack: 0.03, pan: -0.6, panTo: 0.6, rev: 0.4 });
+    kick(b, { f: 160, to: 45, dur: 0.35, vol: 0.65, at: 0.04 });
+    pad(b, { freqs: [C * 4, C * 6, C * 9], dur: 0.9, vol: 0.12, attack: 0.005, cut: 8000, cutTo: 1200, at: 0.04, rev: 0.8 });
   },
-  whoosh: (c) => noise(c, { dur: 0.35, vol: 0.32, type: 'bandpass', f: 300, to: 4500, q: 0.9, attack: 0.15, rev: 0.3 }),
-  boom: (c) => {
-    noise(c, { dur: 1.0, vol: 0.5, f: 1800, to: 90, rev: 0.25 });
-    noise(c, { dur: 0.4, vol: 0.4, f: 2500, to: 200, dist: true });
-    tone(c, { f: 95, to: 30, dur: 0.8, vol: 0.5 });
+  whoosh: (b) =>
+    noise(b, { dur: 0.4, vol: 0.32, type: 'bandpass', f: 300, to: 4000, q: 1.0, attack: 0.18, pan: -0.6, panTo: 0.6, rev: 0.3 }),
+  // 爆発：低く重い「ドォン」
+  boom: (b) => {
+    kick(b, { f: 120, to: 30, dur: 1.0, vol: 0.9, drop: 0.2 });
+    noise(b, { dur: 1.2, vol: 0.5, f: 1400, to: 70, rev: 0.4, warm: true });
   },
-  // とどめの大爆発：グアッシャーーーン！（ドン＋バリバリ＋ガラスの破片＋鐘のような鳴り＋長い響き）
-  ultboom: (c) => {
-    tone(c, { f: 120, to: 28, dur: 1.5, vol: 0.75, rev: 0.3 });
-    tone(c, { f: 55, to: 25, dur: 2.2, type: 'triangle', vol: 0.45 });
-    noise(c, { dur: 0.7, vol: 0.9, f: 6000, to: 300, dist: true });
-    noise(c, { dur: 2.2, vol: 0.5, f: 3500, to: 70, rev: 0.8 });
-    shatter(c, { count: 45, spread: 1.1, vol: 0.07, at: 0.03, rev: 0.6 });
-    metal(c, { f: 700, dur: 2.4, vol: 0.12, at: 0.02, rev: 1.0 });
+  // とどめの大爆発：ドーン → 低いブォーン → 長く響く
+  ultboom: (b) => {
+    kick(b, { f: 130, to: 26, dur: 1.8, vol: 1.0, drop: 0.3 });
+    braam(b, { f: 41.2, dur: 2.6, vol: 0.45, rev: 0.9 });
+    noise(b, { dur: 0.5, vol: 0.6, f: 5000, to: 300, warm: true });
+    noise(b, { dur: 2.6, vol: 0.45, f: 1800, to: 60, rev: 0.8 });
+    air(b, { dur: 2.0, vol: 0.07, at: 0.05, rev: 1.0 });
   },
-  ko: (c) => {
-    noise(c, { dur: 0.6, vol: 0.7, f: 4000, to: 200, dist: true });
-    noise(c, { dur: 1.6, vol: 0.5, f: 2200, to: 70, rev: 0.6 });
-    tone(c, { f: 90, to: 26, dur: 1.2, vol: 0.6 });
-    shatter(c, { count: 25, spread: 0.8, vol: 0.06, rev: 0.5 });
-    tone(c, { f: 420, to: 55, dur: 1.4, type: 'sawtooth', vol: 0.07, at: 0.1, rev: 0.5 });
+  // たおれる：ドーン＋下がっていく音
+  ko: (b) => {
+    kick(b, { f: 110, to: 28, dur: 1.4, vol: 0.95, drop: 0.25 });
+    noise(b, { dur: 1.6, vol: 0.45, f: 2000, to: 60, rev: 0.6, warm: true });
+    pad(b, { freqs: [110, 165], dur: 1.6, vol: 0.22, attack: 0.02, cut: 1500, cutTo: 120, bend: 0.5, at: 0.05, rev: 0.6 });
   },
-  win: (c) => {
-    arp(c, [523, 659, 784], 0.12, 0.2, 'square', 0.06, 0, 0.4);
-    arp(c, [262, 330, 392], 0.12, 0.2, 'triangle', 0.1, 0, 0.3);
-    vib(c, { f: 1047, dur: 1.4, vol: 0.08, at: 0.36, rev: 0.6, type: 'square' });
-    vib(c, { f: 523, dur: 1.4, vol: 0.12, at: 0.36, rev: 0.5 });
-    trill(c, { base: 1047, steps: 10, step: 0.03, at: 0.5, vol: 0.03, rev: 0.7, end: 0.8 });
+  // 勝ち：ドン＋明るい和音がふわっと広がる＋キラキラ
+  win: (b) => {
+    kick(b, { f: 140, to: 40, dur: 0.6, vol: 0.6 });
+    [0, 2, 4, 5].forEach((s, i) => pluck(b, { f: note(C * 4, s), dur: 0.35, vol: 0.08, at: i * 0.09, rev: 0.5, pan: i * 0.2 - 0.3 }));
+    pad(b, { freqs: [C * 2, C * 2.5, C * 3, C * 4.5, C * 4], dur: 2.2, vol: 0.28, attack: 0.04, cut: 5000, cutTo: 800, at: 0.36, rev: 0.7 });
+    tone(b, { f: C, dur: 2.0, vol: 0.25, at: 0.36, attack: 0.03 });
+    sparkle(b, { base: C * 8, count: 12, spread: 1.2, vol: 0.05, at: 0.4 });
   },
-  lose: (c) => {
-    arp(c, [392, 330], 0.22, 0.3, 'triangle', 0.1, 0, 0.4);
-    tone(c, { f: 262, to: 220, dur: 0.9, type: 'triangle', vol: 0.11, at: 0.44, rev: 0.5 });
+  // 負け：しずかに下がる、こもった和音
+  lose: (b) => {
+    pad(b, { freqs: [C * 2, C * 2.38, C * 3], dur: 1.8, vol: 0.2, attack: 0.08, cut: 1800, cutTo: 250, bend: 0.94, rev: 0.6 });
+    tone(b, { f: C, to: C * 0.84, dur: 1.6, vol: 0.18, attack: 0.05 });
   },
 };
 
@@ -398,13 +607,22 @@ const last: Partial<Record<SfxName, number>> = {};
 export function sfx(name: SfxName) {
   if (muted) return;
   try {
-    const c = ac();
-    if (!c) return;
+    const b = bus();
+    if (!b) return;
     const now = performance.now();
     if (now - (last[name] ?? 0) < 30) return;
     last[name] = now;
-    SOUNDS[name](c);
+    SOUNDS[name](b);
+    const d = DUCK[name];
+    if (d) duckBgm(d);
   } catch {
     /* 音が出せなくても遊べる */
   }
+}
+
+/** 試し聞き用：音を、画面に出さずに作って返す（ファイルに書き出して聞き比べるときに使う） */
+export async function renderSfx(name: SfxName, seconds = 3, sampleRate = 44100): Promise<AudioBuffer> {
+  const c = new OfflineAudioContext(2, Math.ceil(seconds * sampleRate), sampleRate);
+  SOUNDS[name](makeBus(c, VOLUME));
+  return c.startRendering();
 }

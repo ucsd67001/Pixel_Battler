@@ -10,7 +10,7 @@ import type { Stage } from '../three/stage';
 import { StageView } from './StageView';
 import { Term } from './Term';
 import { elementTip, GLOSSARY } from '../game/glossary';
-import { sfx } from '../lib/sfx';
+import { playBgm, sfx, stopBgm } from '../lib/sfx';
 
 interface SideHud {
   hp: number;
@@ -151,8 +151,10 @@ export function Battle({
 
   useEffect(() => {
     alive.current = true;
+    playBgm(); // バトルの曲を、頭からくり返し流す
     return () => {
       alive.current = false;
+      stopBgm(0.4);
     };
   }, []);
   useEffect(() => {
@@ -296,6 +298,7 @@ export function Battle({
     if (!alive.current || st.winner === null) return;
     const loser = foe(st.winner);
     setMsg(`${chars[loser].spec.name} は たおれた`);
+    stopBgm(1.5); // 勝ち・負けの音がよく聞こえるように、曲を小さくしていく
     await s.ko(loser);
     setSplash('K.O.');
     await s.wait(1.0);
