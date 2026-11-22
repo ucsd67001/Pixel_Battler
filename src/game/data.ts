@@ -30,6 +30,11 @@ const WEAK: Record<Element, Element[]> = {
   dark: [],
 };
 
+/** その属性が強い相手・弱い相手 */
+export function matchup(e: Element): { strong: Element[]; weak: Element[] } {
+  return { strong: STRONG[e], weak: WEAK[e] };
+}
+
 export function elementMultiplier(a: Element, d: Element): number {
   if (STRONG[a].includes(d)) return 1.3;
   if (WEAK[a].includes(d)) return 0.77;

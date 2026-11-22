@@ -1344,3 +1344,68 @@ button {
     transform: skewX(8deg);
   }
 }
+
+/* ── 分かりにくい言葉の説明（タップ・マウスで吹き出し） ── */
+.term {
+  cursor: help;
+  pointer-events: auto;
+  text-decoration: underline dotted rgba(255, 255, 255, 0.45);
+  text-underline-offset: 3px;
+  -webkit-tap-highlight-color: transparent;
+}
+.term:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.rank-term {
+  text-decoration: none;
+  align-self: flex-start;
+}
+.term-q {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: #0b1020;
+  background: rgba(255, 255, 255, 0.55);
+  vertical-align: 1px;
+  text-decoration: none;
+}
+.tip-bubble {
+  position: fixed;
+  z-index: 100;
+  transform: translateY(-100%);
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(120, 200, 255, 0.55);
+  background: rgba(8, 12, 26, 0.96);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5), 0 0 18px rgba(80, 180, 255, 0.25);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: left;
+  letter-spacing: 0;
+  pointer-events: none;
+  animation: tipIn 0.14s ease-out both;
+}
+.tip-bubble.below {
+  transform: none;
+}
+.tip-bubble b {
+  color: var(--cyan);
+  font-size: 13px;
+}
+@keyframes tipIn {
+  from {
+    opacity: 0;
+    margin-top: 4px;
+  }
+}

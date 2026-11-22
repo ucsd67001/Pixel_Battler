@@ -8,6 +8,8 @@ import {
 import { ELEMENT_INFO, SKILL_TABLE } from '../game/data';
 import type { Stage } from '../three/stage';
 import { StageView } from './StageView';
+import { Term } from './Term';
+import { elementTip, GLOSSARY } from '../game/glossary';
 import { sfx } from '../lib/sfx';
 
 interface SideHud {
@@ -65,12 +67,18 @@ function SidePanel({ c, h, side }: { c: Character; h: SideHud; side: Side }) {
   return (
     <div className={`hud-side s${side}`} style={{ '--el': el.color } as CSSProperties}>
       <div className="hud-name">
-        <span className="hud-el">{el.label}</span>
+        <Term tip={elementTip(c.spec.element)} mark={false} className="hud-el">
+          {el.label}
+        </Term>
         <b>{c.spec.name}</b>
-        <span className={`rank mini rank-${c.rank}`}>{c.rank}</span>
+        <Term tip={GLOSSARY.rank} mark={false}>
+          <span className={`rank mini rank-${c.rank}`}>{c.rank}</span>
+        </Term>
       </div>
       <div className="hud-row">
-        <span className="hud-tag">HP</span>
+        <Term tip={GLOSSARY.hp} mark={false} className="hud-tag">
+          HP
+        </Term>
         <Gauge value={h.hp} max={c.stats.hp} kind="hp" />
         <span className="hud-num">
           {h.hp}
@@ -78,22 +86,34 @@ function SidePanel({ c, h, side }: { c: Character; h: SideHud; side: Side }) {
         </span>
       </div>
       <div className="hud-row thin">
-        <span className="hud-tag">SP</span>
+        <Term tip={GLOSSARY.sp} mark={false} className="hud-tag">
+          SP
+        </Term>
         <Gauge value={h.sp} max={c.stats.sp} kind="sp" />
         <span className="hud-num small">{h.sp}</span>
       </div>
       <div className="hud-row thin">
-        <span className="hud-tag">必殺</span>
+        <Term tip={GLOSSARY.gauge} mark={false} className="hud-tag">
+          必殺
+        </Term>
         <Gauge value={h.gauge} max={MAX_GAUGE} kind="od" />
         <span className="hud-num small">{h.gauge >= MAX_GAUGE ? 'MAX' : `${h.gauge}%`}</span>
       </div>
       <div className="hud-status">
-        {h.guarding && <span className="st good">ガード中</span>}
-        {h.counter && <span className="st good">カウンターの構え</span>}
+        {h.guarding && (
+          <Term tip={GLOSSARY.guard} mark={false} className="st good">
+            ガード中
+          </Term>
+        )}
+        {h.counter && (
+          <Term tip={GLOSSARY.counter} mark={false} className="st good">
+            カウンターの構え
+          </Term>
+        )}
         {h.buffs.map((b) => (
-          <span key={b} className={`st ${b.includes('ダウン') ? 'bad' : 'good'}`}>
+          <Term key={b} tip={GLOSSARY.buff} mark={false} className={`st ${b.includes('ダウン') ? 'bad' : 'good'}`}>
             {b}
-          </span>
+          </Term>
         ))}
       </div>
     </div>
