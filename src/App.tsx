@@ -6,6 +6,7 @@ import { Create } from './ui/Create';
 import { Hangar } from './ui/Hangar';
 import { Battle } from './ui/Battle';
 import { Room } from './ui/Room';
+import { Showroom } from './ui/Showroom';
 import type { NetBattle, RoomSession } from './net/room';
 
 type Screen =
@@ -69,6 +70,7 @@ export function App() {
   );
 
   function renderScreen() {
+  if (import.meta.env.DEV && location.search.includes('showroom')) return <Showroom />;
 
   switch (screen.name) {
     case 'title':
