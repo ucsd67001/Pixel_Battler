@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "sim": "tsx scripts/sim.ts",
     "build:functions": "esbuild functions/src/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=functions/lib/index.js --external:firebase-functions --external:firebase-admin",
-    "deploy": "npm run build && npm run build:functions && firebase deploy"
+    "deploy": "npm run build && npm run build:functions && firebase deploy --project pixel-battler-gemu"
   },
   "dependencies": {
     "firebase": "^13.4.0",

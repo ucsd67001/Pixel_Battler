@@ -38,7 +38,7 @@ cd C:\Users\ucsd6\dev\snapgear; npm run deploy
 家族を足すとき（今のアドレスも含めて、全部をカンマ区切りで入れ直す。入れたら `npm run deploy`）：
 
 ```powershell
-cd C:\Users\ucsd6\dev\snapgear; firebase functions:secrets:set ALLOWED_EMAILS
+cd C:\Users\ucsd6\dev\snapgear; firebase functions:secrets:set ALLOWED_EMAILS --project pixel-battler-gemu
 ```
 
 ## 遊び方
