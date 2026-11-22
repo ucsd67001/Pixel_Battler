@@ -1223,3 +1223,124 @@ button {
   color: #fff; font-size: 18px; cursor: pointer; line-height: 1;
 }
 .mute-btn:hover { background: rgba(30,40,60,0.85); }
+
+/* ── 必殺技：映画のような黒い帯・集中線・写真・光る題 ── */
+.cinema-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 11%;
+  z-index: 4;
+  background: #000;
+  pointer-events: none;
+  animation: cinemaIn 0.3s cubic-bezier(0.2, 1, 0.3, 1) both;
+}
+.cinema-bar.top {
+  top: 0;
+  transform-origin: top;
+}
+.cinema-bar.bottom {
+  bottom: 0;
+  transform-origin: bottom;
+}
+@keyframes cinemaIn {
+  from {
+    transform: scaleY(0);
+  }
+}
+.banner.ult {
+  animation: ultShake 0.45s linear 0.05s both;
+}
+@keyframes ultShake {
+  0%, 100% { transform: translate(0, 0); }
+  15% { transform: translate(-8px, 4px); }
+  30% { transform: translate(7px, -5px); }
+  45% { transform: translate(-5px, 3px); }
+  60% { transform: translate(4px, -2px); }
+  75% { transform: translate(-2px, 1px); }
+}
+.banner-lines {
+  position: absolute;
+  inset: -24px 0;
+  transform: skewY(-3deg);
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0) 0 38px, rgba(255, 255, 255, 0.28) 38px 41px, rgba(255, 255, 255, 0) 41px 90px);
+  mix-blend-mode: overlay;
+  animation: linesRun 0.25s linear infinite, stripeIn 0.35s cubic-bezier(0.2, 1, 0.3, 1) both;
+  pointer-events: none;
+}
+.banner.s1 .banner-lines {
+  animation-direction: reverse, normal;
+}
+@keyframes linesRun {
+  to {
+    background-position: 90px 0;
+  }
+}
+.banner-photo {
+  position: absolute;
+  top: 50%;
+  right: 6%;
+  height: calc(100% + 60px);
+  aspect-ratio: 1;
+  object-fit: cover;
+  transform: translateY(-50%) skewX(-8deg);
+  border: 3px solid #fff;
+  box-shadow: 0 0 30px var(--el), 0 0 0 6px color-mix(in srgb, var(--el) 60%, transparent);
+  animation: photoIn 0.4s cubic-bezier(0.2, 1.3, 0.3, 1) 0.08s both;
+}
+.banner.s1 .banner-photo {
+  right: auto;
+  left: 6%;
+  transform: translateY(-50%) skewX(8deg);
+}
+@keyframes photoIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateX(120px) skewX(-8deg) scale(1.4);
+  }
+}
+.banner.ult .banner-sub {
+  font-size: 14px;
+  color: var(--el);
+  text-shadow: 0 0 10px var(--el);
+  opacity: 1;
+}
+.banner.ult .banner-title {
+  background: linear-gradient(100deg, #fff 0%, #fff 40%, var(--el) 50%, #fff 60%, #fff 100%);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 14px var(--el)) drop-shadow(0 3px 0 rgba(0, 0, 0, 0.6));
+  text-shadow: none;
+  animation: ultTitle 0.5s cubic-bezier(0.2, 1.4, 0.3, 1) both, titleShine 1.2s linear 0.3s infinite;
+}
+@keyframes ultTitle {
+  from {
+    opacity: 0;
+    transform: scale(2.4);
+    filter: blur(8px) drop-shadow(0 0 14px var(--el));
+  }
+}
+@keyframes titleShine {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+.banner.ult .banner-shout {
+  font-size: clamp(16px, 2.8vw, 24px);
+  text-shadow: 0 0 12px var(--el), 0 2px 0 rgba(0, 0, 0, 0.6);
+}
+@media (max-width: 640px) {
+  .banner-photo {
+    height: 70px;
+    top: -54px;
+    transform: skewX(-8deg);
+  }
+  .banner.s1 .banner-photo {
+    transform: skewX(8deg);
+  }
+}

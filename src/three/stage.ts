@@ -48,6 +48,8 @@ export class Stage {
   private bg = new THREE.Color('#060a16');
   private t = 0;
   private stopTimer = 0;
+  private bloomBase = 0.75;
+  private bloomExtra = 0;
   turntable = true;
   readonly homeX = [-1.75, 1.75];
 
@@ -282,6 +284,7 @@ export class Stage {
       this.camPos.z + (Math.random() - 0.5) * s * 0.5,
     );
     this.camera.lookAt(this.camLook);
+    this.bloom.strength = this.bloomBase + this.bloomExtra;
     this.composer.render(raw);
   };
 
@@ -370,16 +373,16 @@ export class Stage {
   private dim(on: boolean, dur = 0.4) {
     const h0 = this.hemi.intensity;
     const k0 = this.key.intensity;
-    const b0 = this.bloom.strength;
+    const b0 = this.bloomBase;
     const h1 = on ? 0.18 : 0.75;
     const k1 = on ? 0.6 : 2.4;
-    const b1 = on ? 0.9 : 0.75;
+    const b1 = on ? 0.6 : 0.75;
     const bgFrom = (this.scene.background as THREE.Color).clone();
     const bgTo = on ? new THREE.Color('#020308') : this.bg;
     return this.tw.add(dur, (k) => {
       this.hemi.intensity = lerp(h0, h1, k);
       this.key.intensity = lerp(k0, k1, k);
-      this.bloom.strength = lerp(b0, b1, k);
+      this.bloomBase = lerp(b0, b1, k);
       (this.scene.background as THREE.Color).copy(bgFrom).lerp(bgTo, k);
     });
   }
@@ -709,6 +712,58 @@ export class Stage {
   }
 
   // ── 必殺技 ──
+  // 画面ぜんたいを光らせる（DOMの板を重ねて、すぐ消す）
+  private flash(color = '#ffffff', dur = 0.35, peak = 0.85) {
+    const el = document.createElement('div');
+    const sec = dur / this.speed;
+    el.style.cssText = `position:absolute;inset:0;pointer-events:none;z-index:2;background:${color};opacity:${peak};transition:opacity ${sec}s ease-out`;
+    this.container.appendChild(el);
+    void el.offsetWidth;
+    el.style.opacity = '0';
+    window.setTimeout(() => el.remove(), sec * 1000 + 120);
+  }
+  // 光のにじみを一瞬強くする
+  private bloomKick(peak: number, dur: number) {
+    this.bloomExtra = Math.max(this.bloomExtra, peak);
+    const from = this.bloomExtra;
+    return this.tw.add(dur, (k) => (this.bloomExtra = from * (1 - k)), Ease.outCubic);
+  }
+  // 横のライトを、技の色で光らせる
+  private lightKick(color: string, power = 60, dur = 0.5) {
+    const c = new THREE.Color(color);
+    this.rims.forEach((l) => l.color.copy(c));
+    return this.tw.add(
+      dur,
+      (k) => this.rims.forEach((l) => (l.intensity = lerp(power, 10, k))),
+      Ease.outCubic,
+    ).then(() => this.rims.forEach((l) => l.color.set('#ffffff')));
+  }
+  // 足元から何重にも広がる衝撃波
+  private shockwave(side: Side, c: string, size = 1) {
+    const f = this.feet(side);
+    for (let i = 0; i < 3; i++) {
+      this.wait(i * 0.09).then(() => this.fx.ring(f, i === 1 ? '#ffffff' : c, (3 + i * 1.6) * size, 0.7 + i * 0.15, true, 0.08));
+    }
+    this.fx.burst(f, '#c9b8a0', { count: 40, speed: 5 * size, up: 2.5, gravity: 7, size: 0.18, life: 0.9, drag: 0.6 });
+  }
+  // とどめの大爆発（どの必殺技も、最後はこれで締める）
+  private bigImpact(foe: Side, c: string, power = 1) {
+    const at = this.chest(foe);
+    sfx('ultboom');
+    this.flash('#ffffff', 0.45, 0.9);
+    window.setTimeout(() => this.flash(c, 0.6, 0.45), 90 / this.speed);
+    this.bloomKick(0.35 * power, 0.7);
+    this.lightKick(c, 30, 0.8);
+    this.fx.sphere(at, c, 1.7 * power, 0.55);
+    this.fx.ring(at, '#ffffff', 2.6 * power, 0.45, false, 0.05);
+    this.fx.burst(at, c, { count: 70, speed: 11 * power, size: 0.22, life: 0.8, drag: 1.2, bright: 1.6 });
+    this.fx.burst(at, '#ffffff', { count: 24, speed: 14, size: 0.12, life: 0.45, bright: 1.6 });
+    this.fx.beam(this.feet(foe), this.feet(foe).add(new THREE.Vector3(0, 9, 0)), c, 0.22 * power, 0.7, 0.6);
+    this.shockwave(foe, c, power);
+    this.shake(0.9);
+    this.hitStop(420, 0.12);
+  }
+
   async ultimate(side: Side, style: UltStyle, hits: number, onImpact: ImpactFn, onBanner: () => void) {
     const r = this.robots[side]!;
     const foe = (1 - side) as Side;
@@ -717,25 +772,52 @@ export class Stage {
     const home = this.homeX[side];
     const p = r.root.position;
 
-    // ① 暗くして、寄る
-    this.dim(true);
-    const front = new THREE.Vector3(p.x + dir * 2.7, 1.55, p.z + 3.1);
-    const look = new THREE.Vector3(p.x, r.chestY, p.z);
+    // ① 暗くして、下から回りこみながら寄る。光の柱と地ひびき
+    this.dim(true, 0.3);
     sfx('charge');
-    await Promise.all([this.camTo(front, look, 0.45), this.pose(side, 'charge', 0.35, Ease.outBack)]);
-    this.fx.ring(this.feet(side), c, 2.3, 0.7);
-    this.fx.aura(() => this.feet(side), c, 1.3, 40, 0.75);
-    this.fx.gather(() => this.world(r.core), c, 1.1, 30);
-    r.setEyes(1.8);
+    const start = new THREE.Vector3(p.x + dir * 4.2, 0.7, p.z + 4.6);
+    const front = new THREE.Vector3(p.x + dir * 2.4, 1.45, p.z + 2.9);
+    const close = new THREE.Vector3(p.x + dir * 1.7, 1.6, p.z + 2.2);
+    const look = new THREE.Vector3(p.x, r.chestY, p.z);
+    this.camPos.copy(start);
+    this.camLook.copy(look);
+    await Promise.all([this.camTo(front, look, 0.5, Ease.outCubic), this.pose(side, 'charge', 0.35, Ease.outBack)]);
+    const f = this.feet(side);
+    // ロボのまわりに、細い光の棒が立ちのぼる
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + 0.3;
+      const b = f.clone().add(new THREE.Vector3(Math.cos(a) * 1.1, 0, Math.sin(a) * 1.1));
+      this.fx.beam(b, b.clone().add(new THREE.Vector3(0, 6, 0)), c, 0.025, 1.0, 0.45);
+    }
+    this.fx.ring(f, c, 2.6, 0.7);
+    this.fx.ring(f, '#ffffff', 1.8, 0.5, true, 0.06);
+    this.fx.aura(() => this.feet(side), c, 1.5, 90, 0.85);
+    this.fx.gather(() => this.world(r.core), c, 1.4, 70);
+    this.fx.burst(f, c, { count: 30, speed: 3, up: 4, size: 0.2, life: 1.0, drag: 0.4 });
+    this.lightKick(c, 22, 1.5);
+    this.bloomKick(0.25, 1.5);
+    r.setEyes(2.4);
+    this.tw.add(1.4, (k) => this.shake(0.04 + 0.12 * k), Ease.linear);
+    this.camTo(close, look, 1.4, Ease.linear);
+    await this.wait(0.25);
     sfx('cutin');
     onBanner();
-    await this.wait(1.2);
-    this.fx.sphere(this.world(r.core), c, 0.9, 0.35);
-    this.shake(0.25);
+    // 体が三回、白く光る
+    for (let i = 0; i < 3; i++) {
+      r.setFlash(0.8);
+      this.tw.add(0.16, (k) => r.setFlash(0.8 * (1 - k)), Ease.linear);
+      this.fx.ring(this.world(r.core), c, 1.2 + i * 0.4, 0.3, false, 0.06);
+      await this.wait(0.33);
+    }
+    this.flash(c, 0.3, 0.35);
+    this.fx.sphere(this.world(r.core), c, 0.8, 0.35);
+    this.fx.burst(this.world(r.core), '#ffffff', { count: 40, speed: 8, size: 0.16, life: 0.4 });
+    this.shake(0.35);
+    sfx('whoosh');
 
     // ② 引いて、放つ
     const wide = this.basePos.clone().add(new THREE.Vector3(0, 0.4, 0.4));
-    this.camTo(wide, this.baseLook, 0.35);
+    this.camTo(wide, this.baseLook, 0.3, Ease.outCubic);
     switch (style) {
       case 'beam':
         await this.ultBeam(side, foe, c, onImpact);
@@ -754,7 +836,8 @@ export class Stage {
         break;
     }
 
-    // ③ 戻る
+    // ③ 余韻のあと、戻る
+    await this.wait(0.35);
     r.setEyes(1);
     this.dim(false, 0.6);
     this.camHome(0.6);
@@ -770,102 +853,180 @@ export class Stage {
     const r = this.robots[side]!;
     await Promise.all([this.pose(side, 'aim', 0.2), this.face(side, true, 0.2)]);
     const from = this.world(r.tip);
+    // 銃口に光をためる
+    sfx('orb');
+    this.fx.gather(() => from, c, 0.4, 90);
+    this.fx.sphere(from, c, 0.5, 0.45);
+    await this.wait(0.4);
     const to = this.chest(foe);
-    to.x += this.dir(side) * 3;
-    this.fx.sphere(from, c, 0.6, 0.3);
+    to.x += this.dir(side) * 4;
     sfx('beam');
-    this.fx.beam(from, to, c, 0.55, 1.1);
-    await this.wait(0.22);
-    this.fx.sphere(this.chest(foe), c, 1.4, 0.6);
-    this.fx.ring(this.feet(foe), c, 3, 0.7);
-    onImpact(0);
-    this.shake(0.55);
-    await this.wait(0.9);
+    this.flash('#ffffff', 0.25, 0.6);
+    this.fx.beam(from, to, c, 0.5, 1.5, 0.6);
+    this.lightKick(c, 18, 1.5);
+    // 撃っている間、反動で少し下がり、相手のところで火花が散りつづける
+    const x0 = r.root.position.x;
+    this.tw.add(1.3, (k) => (r.root.position.x = x0 - this.dir(side) * 0.35 * Math.sin(k * Math.PI * 0.5)), Ease.outCubic);
+    for (let i = 0; i < 6; i++) {
+      const hit = this.chest(foe);
+      this.fx.burst(hit, i % 2 ? '#ffffff' : c, { count: 12, speed: 7, size: 0.2, life: 0.35, bright: 1.4 });
+      this.fx.ring(from.clone().lerp(hit, i / 6), c, 0.9, 0.3, false, 0.08);
+      this.shake(0.3);
+      if (i === 1) onImpact(0);
+      await this.wait(0.17);
+    }
+    this.bigImpact(foe, c);
+    await this.wait(0.7);
   }
 
   private async ultSlash(side: Side, foe: Side, c: string, onImpact: ImpactFn) {
     const dir = this.dir(side);
-    await Promise.all([this.pose(side, 'windup', 0.18), this.face(side, true, 0.18)]);
-    const pass = this.moveX(side, this.homeX[foe] + dir * 1.4, 0.2, Ease.inCubic);
-    await this.wait(0.1);
+    await Promise.all([this.pose(side, 'windup', 0.22), this.face(side, true, 0.18)]);
+    // 目にもとまらぬ速さで、相手を通りぬける（残像の光を残す）
+    const x0 = this.robots[side]!.root.position.x;
+    const pass = this.moveX(side, this.homeX[foe] + dir * 1.6, 0.16, Ease.inCubic);
+    for (let i = 0; i < 6; i++) {
+      const px = lerp(x0, this.homeX[foe] + dir * 1.6, i / 6);
+      this.fx.burst(new THREE.Vector3(px, this.robots[side]!.chestY, 0), c, { count: 6, speed: 0.6, size: 0.35, life: 0.35 });
+    }
+    sfx('whoosh');
+    await this.wait(0.08);
     await this.pose(side, 'slash', 0.06);
     sfx('slash');
     const at = this.chest(foe);
-    this.fx.arc(at, c, 1.9, new THREE.Euler(0.3, 0, -0.6), 0.6, Math.PI * 1.4);
-    this.fx.arc(at, '#ffffff', 1.6, new THREE.Euler(0.3, 0, -0.5), 0.45, Math.PI * 1.2);
-    this.fx.burst(at, c, { count: 50, speed: 7, size: 0.22, life: 0.5 });
+    this.flash('#ffffff', 0.2, 0.7);
+    // 大きな X の字
+    this.fx.arc(at, c, 2.3, new THREE.Euler(0.3, 0, -0.7), 0.7, Math.PI * 1.4);
+    this.fx.arc(at, '#ffffff', 2.0, new THREE.Euler(0.3, 0, -0.6), 0.5, Math.PI * 1.2);
+    this.fx.arc(at, c, 2.3, new THREE.Euler(-0.3, 0, 0.7 + Math.PI), 0.7, Math.PI * 1.4);
+    this.fx.burst(at, c, { count: 40, speed: 7, size: 0.22, life: 0.5 });
     onImpact(0);
-    this.hitStop(280, 0.1);
-    this.shake(0.5);
+    this.hitStop(500, 0.06);
+    this.shake(0.4);
     await pass;
+    // 背を向けたまま、一拍おいて……爆発
+    await this.pose(side, 'idle', 0.25);
+    await this.wait(0.45);
+    this.bigImpact(foe, c);
     await this.wait(0.6);
   }
 
   private async ultMeteor(side: Side, foe: Side, c: string, hits: number, onImpact: ImpactFn) {
     const r = this.robots[side]!;
     await this.pose(side, 'cast', 0.25, Ease.outBack);
-    this.camTo(this.basePos.clone().add(new THREE.Vector3(0, 1.2, 2)), new THREE.Vector3(0, 1.8, 0), 0.4);
-    await this.tw.add(0.35, (k) => (r.root.position.y = 2.6 * k), Ease.outCubic);
+    this.camTo(this.basePos.clone().add(new THREE.Vector3(0, 1.4, 2.2)), new THREE.Vector3(0, 2.0, 0), 0.45);
+    await this.tw.add(0.4, (k) => (r.root.position.y = 2.8 * k), Ease.outCubic);
+    // 空に大きな光の輪
+    const sky = this.chest(foe).add(new THREE.Vector3(0, 6.5, -2.5));
+    this.fx.ring(sky, c, 4.5, 1.6, false, 0.05);
+    this.fx.ring(sky, '#ffffff', 3.2, 1.2, false, 0.04);
+    this.fx.sphere(sky, c, 1.2, 1.0);
+    sfx('charge');
+    await this.wait(0.45);
+    // ダメージになる流星のまわりに、小さな流星もたくさん降らせる
+    const extras = async () => {
+      for (let i = 0; i < 10; i++) {
+        const t = this.chest(foe).add(new THREE.Vector3((Math.random() - 0.5) * 5, -1.2, (Math.random() - 0.5) * 3));
+        const s = t.clone().add(new THREE.Vector3((Math.random() - 0.5) * 3, 9, -3));
+        this.fx.projectile(s, t, c, 0.35, 0.16).then(() => {
+          this.fx.burst(t, c, { count: 12, speed: 4, size: 0.18, life: 0.4, up: 2, gravity: 6 });
+          this.fx.ring(t.setY(0.03), c, 1.2, 0.4);
+        });
+        await this.wait(0.09);
+      }
+    };
+    extras();
     for (let i = 0; i < hits; i++) {
+      const last = i === hits - 1;
       const target = this.chest(foe);
       target.x += (Math.random() - 0.5) * 0.5;
-      const from = target.clone().add(new THREE.Vector3((Math.random() - 0.5) * 3, 8, -3));
+      const from = sky.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, 0, 0));
       sfx('orb');
-      await this.fx.projectile(from, target, c, 0.28, 0.34);
-      sfx('boom');
-      this.fx.sphere(target, c, 1.3, 0.45);
-      this.fx.burst(target, c, { count: 30, speed: 6, size: 0.24, life: 0.5 });
-      this.fx.ring(this.feet(foe), c, 2.2, 0.5);
+      await this.fx.projectile(from, target, c, 0.24, last ? 0.6 : 0.38);
       onImpact(i);
-      this.shake(0.4);
-      await this.wait(0.1);
+      if (last) {
+        this.bigImpact(foe, c, 1.15);
+      } else {
+        sfx('boom');
+        this.flash(c, 0.2, 0.3);
+        this.fx.sphere(target, c, 1.5, 0.45);
+        this.fx.burst(target, c, { count: 36, speed: 7, size: 0.24, life: 0.5 });
+        this.shockwave(foe, c, 0.6);
+        this.shake(0.45);
+      }
+      await this.wait(0.12);
     }
-    await this.tw.add(0.3, (k) => (r.root.position.y = 2.6 * (1 - k)), Ease.inQuad);
-    this.fx.ring(this.feet(side), c, 1.6, 0.4);
+    await this.tw.add(0.3, (k) => (r.root.position.y = 2.8 * (1 - k)), Ease.inQuad);
+    sfx('land');
+    this.fx.ring(this.feet(side), c, 1.8, 0.4);
     this.shake(0.2);
-    await this.wait(0.3);
+    await this.wait(0.4);
   }
 
   private async ultBurst(side: Side, foe: Side, c: string, onImpact: ImpactFn) {
+    const r = this.robots[side]!;
     const dir = this.dir(side);
-    await Promise.all([
-      this.pose(side, 'pullback', 0.2),
-      this.face(side, true, 0.2),
-      this.moveX(side, this.homeX[foe] - dir * 1.25, 0.24, Ease.inCubic),
-    ]);
+    await Promise.all([this.pose(side, 'pullback', 0.2), this.face(side, true, 0.2)]);
+    // 手の先に、どんどん大きくなる光の玉
+    const hand = () => this.world(r.tip);
+    sfx('orb');
+    this.fx.gather(hand, c, 0.5, 100);
+    this.fx.sphere(hand(), c, 0.7, 0.55);
+    await this.wait(0.3);
+    this.fx.sphere(hand(), '#ffffff', 0.9, 0.35);
+    await this.moveX(side, this.homeX[foe] - dir * 1.25, 0.22, Ease.inCubic);
     await this.pose(side, 'thrust', 0.08);
-    sfx('boom');
-    const at = this.chest(foe);
-    this.fx.sphere(at, c, 2.6, 0.8);
-    this.fx.ring(this.feet(foe), c, 4, 0.8);
-    this.fx.burst(at, c, { count: 70, speed: 9, size: 0.26, life: 0.7 });
     onImpact(0);
-    this.hitStop(220, 0.1);
-    this.shake(0.65);
-    await this.wait(0.7);
+    this.bigImpact(foe, c, 1.3);
+    // 余波で、もう二回ふくらむ
+    for (let i = 0; i < 2; i++) {
+      await this.wait(0.22);
+      sfx('boom');
+      const at = this.chest(foe).add(new THREE.Vector3((Math.random() - 0.5) * 1.2, (Math.random() - 0.3) * 1.2, 0));
+      this.fx.sphere(at, c, 1.6, 0.5);
+      this.fx.burst(at, c, { count: 30, speed: 6, size: 0.22, life: 0.5 });
+      this.shake(0.4);
+    }
+    await this.wait(0.4);
   }
 
   private async ultRush(side: Side, foe: Side, c: string, hits: number, onImpact: ImpactFn) {
     const dir = this.dir(side);
     await Promise.all([
-      this.pose(side, 'pullback', 0.18),
-      this.face(side, true, 0.18),
-      this.moveX(side, this.homeX[foe] - dir * 1.1, 0.2, Ease.inCubic),
+      this.pose(side, 'pullback', 0.16),
+      this.face(side, true, 0.16),
+      this.moveX(side, this.homeX[foe] - dir * 1.1, 0.18, Ease.inCubic),
     ]);
+    sfx('whoosh');
     const seq: PoseName[] = ['thrust', 'slash', 'thrust', 'slash'];
-    for (let i = 0; i < hits; i++) {
-      const last = i === hits - 1;
-      if (last) await this.pose(side, 'pullback', 0.12);
+    // ダメージの打撃のあいだに、見せるだけの速い打撃をはさむ
+    const total = hits * 3;
+    let dealt = 0;
+    for (let i = 0; i < total; i++) {
+      const last = i === total - 1;
+      if (last) {
+        await this.pose(side, 'pullback', 0.14);
+        this.flash(c, 0.2, 0.3);
+        await this.wait(0.12);
+      }
       sfx(last ? 'slash' : 'swing');
-      await this.pose(side, last ? 'uppercut' : seq[i % seq.length], last ? 0.1 : 0.07, Ease.outQuad);
+      await this.pose(side, last ? 'uppercut' : seq[i % seq.length], last ? 0.1 : 0.045, Ease.outQuad);
       const at = this.chest(foe);
-      at.y += (Math.random() - 0.5) * 0.5;
-      this.fx.arc(at, i % 2 ? '#ffffff' : c, last ? 1.6 : 0.9, new THREE.Euler(Math.random(), 0, Math.random() * 3), 0.3);
-      this.fx.burst(at, c, { count: last ? 50 : 14, speed: last ? 8 : 5, size: 0.22, life: 0.35 });
-      if (last) this.fx.sphere(at, c, 1.5, 0.5);
-      onImpact(i);
-      if (!last) await this.pose(side, 'pullback', 0.06);
+      at.y += (Math.random() - 0.5) * 0.7;
+      at.x += (Math.random() - 0.5) * 0.3;
+      this.fx.arc(at, i % 2 ? '#ffffff' : c, last ? 1.8 : 0.8 + Math.random() * 0.4, new THREE.Euler(Math.random() * 3, Math.random(), Math.random() * 3), 0.25);
+      this.fx.burst(at, c, { count: 10, speed: 5, size: 0.2, life: 0.3 });
+      this.shake(0.15);
+      if (last) {
+        while (dealt < hits) onImpact(dealt++);
+        this.bigImpact(foe, c, 1.1);
+      } else if (i % 3 === 2 && dealt < hits - 1) {
+        onImpact(dealt++);
+      } else {
+        sfx('hit');
+      }
+      if (!last) await this.pose(side, 'pullback', 0.035);
     }
-    await this.wait(0.6);
+    await this.wait(0.5);
   }
 }

@@ -182,14 +182,14 @@ export class Effects {
     });
   }
 
-  beam(from: THREE.Vector3, to: THREE.Vector3, color: THREE.ColorRepresentation, width = 0.45, dur = 0.9) {
+  beam(from: THREE.Vector3, to: THREE.Vector3, color: THREE.ColorRepresentation, width = 0.45, dur = 0.9, glow = 1) {
     const dir = new THREE.Vector3().subVectors(to, from);
     const len = dir.length();
     const g = new THREE.Group();
     g.position.copy(from).addScaledVector(dir, 0.5);
     g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
-    const outer = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 24, 1, true), addMat(color, 2.2, 0.85));
-    const inner = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 1, 16, 1, true), addMat('#ffffff', 3, 1));
+    const outer = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 24, 1, true), addMat(color, 2.2 * glow, 0.85 * glow));
+    const inner = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 1, 16, 1, true), addMat('#ffffff', 3 * glow, glow));
     g.add(outer, inner);
     return this.temp(g, dur, (k) => {
       const grow = k < 0.15 ? Ease.outCubic(k / 0.15) : k > 0.75 ? 1 - (k - 0.75) / 0.25 : 1;

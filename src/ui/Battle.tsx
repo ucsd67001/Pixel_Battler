@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Character } from '../game/types';
-import { CPU_CHARACTER, chooseAction } from '../game/cpu';
+import { chooseAction, pickCpu } from '../game/cpu';
 import {
   act, canUse, createBattle, endTurn, foe, MAX_GAUGE, startTurn,
   type ActionResult, type ActionType, type BattleState, type Hit, type Side,
@@ -33,6 +33,7 @@ interface Banner {
   sub: string;
   ult: boolean;
   color: string;
+  thumb?: string;
 }
 
 function snap(st: BattleState, side: Side): SideHud {
@@ -108,9 +109,10 @@ export function Battle({
   onExit: () => void;
   onRematch: () => void;
 }) {
-  const [st] = useState(() => createBattle(player, CPU_CHARACTER));
+  const [enemy] = useState(() => pickCpu());
+  const [st] = useState(() => createBattle(player, enemy));
   if (import.meta.env.DEV) (window as any).__battle = st; // 試すときに中を触るため（開発中だけ）
-  const chars: [Character, Character] = [player, CPU_CHARACTER];
+  const chars: [Character, Character] = [player, enemy];
   const stage = useRef<Stage | null>(null);
   const [hud, setHud] = useState<[SideHud, SideHud]>(() => [snap(st, 0), snap(st, 1)]);
   const [phase, setPhase] = useState<'intro' | 'command' | 'busy' | 'over'>('intro');
@@ -121,6 +123,7 @@ export function Battle({
   const [result, setResult] = useState<'win' | 'lose' | null>(null);
   const [speed, setSpeed] = useState(1);
   const [round, setRound] = useState(1);
+  const [cinema, setCinema] = useState(false);
   const pick = useRef<((a: ActionType) => void) | null>(null);
   const alive = useRef(true);
   const pid = useRef(0);
@@ -156,7 +159,7 @@ export function Battle({
 
   const showBanner = (b: Banner) => {
     setBanner(b);
-    setTimeout(() => setBanner((cur) => (cur === b ? null : cur)), (b.ult ? 1800 : 1150) / speedRef.current);
+    setTimeout(() => setBanner((cur) => (cur === b ? null : cur)), (b.ult ? 2000 : 1150) / speedRef.current);
   };
 
   const applyHit = (h: Hit, big = false) => {
@@ -201,9 +204,11 @@ export function Battle({
       case 'ultimate': {
         const u = A.spec.ultimate;
         setMsg(`${A.spec.name} の 必殺技！`);
+        setCinema(true);
         await s.ultimate(a, u.style, res.hits.length, onHit, () =>
-          showBanner({ side: a, title: u.name, sub: u.shout, ult: true, color }),
+          showBanner({ side: a, title: u.name, sub: u.shout, ult: true, color, thumb: A.thumb }),
         );
+        setCinema(false);
         break;
       }
     }
@@ -306,7 +311,7 @@ export function Battle({
         onReady={(s) => {
           stage.current = s;
           s.speed = speedRef.current;
-          s.setFighters(player.spec, CPU_CHARACTER.spec);
+          s.setFighters(player.spec, enemy.spec);
           run().catch((e) => {
             if (alive.current) console.error(e);
           });
@@ -335,12 +340,21 @@ export function Battle({
         ))}
       </div>
 
+      {cinema && (
+        <>
+          <div className="cinema-bar top" />
+          <div className="cinema-bar bottom" />
+        </>
+      )}
+
       {banner && (
         <div
           className={`banner ${banner.ult ? 'ult' : 'skill'} s${banner.side}`}
           style={{ '--el': banner.color } as CSSProperties}
         >
           <div className="banner-stripe" />
+          {banner.ult && <div className="banner-lines" />}
+          {banner.ult && banner.thumb && <img className="banner-photo" src={banner.thumb} alt="" />}
           <div className="banner-text">
             <div className="banner-sub">{banner.ult ? 'ULTIMATE' : banner.sub}</div>
             <div className="banner-title">{banner.title}</div>
