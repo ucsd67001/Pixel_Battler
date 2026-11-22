@@ -1,6 +1,6 @@
 # ピクセル・バトラー（PIXEL BATTLER）
 
-（はじめの仮の名前は SNAPGEAR。手元のフォルダ名 `snapgear` はそのまま）
+（はじめの仮の名前は SNAPGEAR。手元のフォルダは、2026-11-22 に `C:\Users\ucsd6\dev\snapgear` から、デスクトップの `pixelbattler` に移した）
 
 写真を読み込むと、その写真の「いちばん特徴的なもの」をもとに SD ロボが生まれ、コンピュータと戦うブラウザゲーム。
 バーコードバトラーの「読み込んで、生まれて、戦う」を、3D と演出で今風にしたもの。いまは MVP（プレイヤー1体 対 固定のCPU1体）。
@@ -8,7 +8,7 @@
 ## 動かし方（PC）
 
 ```powershell
-cd C:\Users\ucsd6\dev\snapgear; npm run dev
+cd C:\Users\ucsd6\OneDrive\デスクトップ\pixelbattler; npm run dev
 ```
 
 ブラウザで http://localhost:5180 を開く。止めるときはターミナルで Ctrl+C。
@@ -35,7 +35,7 @@ cd C:\Users\ucsd6\dev\snapgear; npm run dev
 - 画面用の Firebase の接続設定は `.env` の `VITE_FIREBASE_*`（`.env.example` に名前）
 
 ```powershell
-cd C:\Users\ucsd6\dev\snapgear; npm run deploy
+cd C:\Users\ucsd6\OneDrive\デスクトップ\pixelbattler; npm run deploy
 ```
 
 （画面を作る → 窓口を一つのファイルにまとめる（`functions/lib/`）→ `firebase deploy`）
@@ -43,7 +43,7 @@ cd C:\Users\ucsd6\dev\snapgear; npm run deploy
 家族を足すとき（今のアドレスも含めて、全部をカンマ区切りで入れ直す。入れたら `npm run deploy`。⚠️ 出し直さないと効かない）：
 
 ```powershell
-cd C:\Users\ucsd6\dev\snapgear; firebase functions:secrets:set ALLOWED_EMAILS --project pixel-battler-gemu
+cd C:\Users\ucsd6\OneDrive\デスクトップ\pixelbattler; firebase functions:secrets:set ALLOWED_EMAILS --project pixel-battler-gemu
 ```
 
 ## 遊び方

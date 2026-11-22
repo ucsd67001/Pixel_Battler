@@ -2,8 +2,10 @@
 // コメントの中と、AIへの指示（server/）は数えない。使い方：npm run check:kanji
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
+// フォルダ名に日本語（デスクトップなど）があっても読めるように、fileURLToPath で戻す
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const list = fs.readFileSync(path.join(root, 'src/game/kanji.ts'), 'utf8');
 const school = new Set([...list.match(/const GRADES = \[([\s\S]*?)\];/)[1].replace(/[^㐀-鿿]/g, '')]);
 if (school.size !== 1026) throw new Error(`漢字の表が ${school.size} 字（1026字のはず）`);

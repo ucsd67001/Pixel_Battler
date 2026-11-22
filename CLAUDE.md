@@ -10,6 +10,7 @@
 |---|---|
 | 本番 | https://pixelbattler.web.app（Firebase のプロジェクト `pixel-battler-gemu`。Hosting＋Cloud Functions `api`＝東京＋Firestore） |
 | 作り | Vite＋React＋TypeScript、three.js。AI は OpenAI（`gpt-6-luna`） |
+| フォルダ | `C:\Users\ucsd6\OneDrive\デスクトップ\pixelbattler`（デスクトップ＝OneDrive の中。2026-11-22 に `C:\Users\ucsd6\dev\snapgear` から移した） |
 | 手元 | `npm run dev` → http://localhost:5180（使われていれば 5181・5182…）。手元ではログインなし・ガレージはこのスマホの中 |
 
 ---
@@ -29,7 +30,7 @@
 ## 持ち主について
 
 - バイブコーディング（専門用語には言い換えを添える。選択肢を出すときは、おすすめと理由をつけて本文に書き切る）
-- 持ち主のターミナルは **PowerShell 5.1**。渡すコマンドは `&&` を使わず、`cd C:\Users\ucsd6\dev\snapgear; …` の1行で
+- 持ち主のターミナルは **PowerShell 5.1**。渡すコマンドは `&&` を使わず、`cd C:\Users\ucsd6\OneDrive\デスクトップ\pixelbattler; …` の1行で
 - 自分の作業の説明を盛らない。試していないことは「まだ試していない」と書く
 
 ## 作業の作法
@@ -45,6 +46,9 @@
 - 日本語のファイルは LF。`sed -i` で直すと改行が変わることがある → Edit か、スクラッチの Python で直す
 - 手元の画面の試し：開発中は `window.__stage`（`S.loop()` で1コマずつ）と `window.__battle`。ふたりで対戦は `?localroom` を付けて二つのタブ
 - 効果音は Web Audio（`src/lib/sfx.ts`）。`renderSfx` で画面に出さずに音を作れる
+- ⚠️ **フォルダは OneDrive の中**：同期中のコミットは、まれに競合する。`node_modules` も同期される
+- ⚠️ **フォルダの名前に日本語（デスクトップ）が入っている**：スクリプトでファイルの場所を作るときは `fileURLToPath(import.meta.url)` を使う（`new URL(...).pathname` は `%E3…` のままになり、ファイルが見つからない。2026-11-22 に `check-kanji.mjs` で起きた）
+- 手元のガレージの保存場所の名前（`snapgear.hangar.v1`）は、前の名前のまま（変えると、ブラウザに残っているロボが読めなくなる）
 
 ## しくみの要点（README の補足）
 
