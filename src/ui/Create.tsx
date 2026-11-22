@@ -8,6 +8,7 @@ import { buildCharacter } from '../game/stats';
 import { findBySeed, saveCharacter } from '../game/storage';
 import { CharacterCard } from './CharacterCard';
 import { Showcase } from './StageView';
+import { sfx } from '../lib/sfx';
 
 const SCAN_LINES = [
   '写真を読み込んでいます',
@@ -40,7 +41,11 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
   useEffect(() => {
     if (step !== 'scan') return;
     setLine(0);
-    const t = setInterval(() => setLine((n) => Math.min(SCAN_LINES.length - 1, n + 1)), 1100);
+    sfx('scan');
+    const t = setInterval(() => {
+      setLine((n) => Math.min(SCAN_LINES.length - 1, n + 1));
+      sfx('scan');
+    }, 1100);
     return () => clearInterval(t);
   }, [step]);
 

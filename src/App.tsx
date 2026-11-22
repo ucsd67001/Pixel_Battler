@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { isMuted, setMuted, sfx, unlockAudio } from './lib/sfx';
 import type { Character } from './game/types';
 import { Title } from './ui/Title';
 import { Create } from './ui/Create';
@@ -15,6 +16,37 @@ export function App() {
   const [screen, setScreen] = useState<Screen>({ name: 'title' });
   const fight = (char: Character) => setScreen({ name: 'battle', char, key: Date.now() });
   const title = () => setScreen({ name: 'title' });
+  const [muted, setMutedState] = useState(isMuted());
+
+  // ボタンを押したら音を鳴らす（ブラウザは、最初に触ったときから音を出せる）
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      unlockAudio();
+      const btn = (e.target as HTMLElement | null)?.closest('button');
+      if (btn && !btn.disabled && !btn.classList.contains('mute-btn')) sfx((btn.dataset.sfx as never) ?? 'click');
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    return () => window.removeEventListener('pointerdown', onDown, true);
+  }, []);
+
+  const toggleMute = () => {
+    setMuted(!muted);
+    setMutedState(!muted);
+    if (muted) sfx('click');
+  };
+  const muteBtn = (
+    <button className="mute-btn" onClick={toggleMute} aria-label={muted ? '音を出す' : '音を消す'}>
+      {muted ? '🔇' : '🔊'}
+    </button>
+  );
+  return (
+    <>
+      {renderScreen()}
+      {muteBtn}
+    </>
+  );
+
+  function renderScreen() {
 
   switch (screen.name) {
     case 'title':
@@ -38,5 +70,6 @@ export function App() {
           onRematch={() => fight(screen.char)}
         />
       );
+  }
   }
 }

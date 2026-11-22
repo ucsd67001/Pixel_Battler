@@ -10,6 +10,7 @@ import type { CharacterSpec, UltStyle } from '../game/types';
 import { ELEMENT_INFO } from '../game/data';
 import { Ease, lerp, Tweener, type EaseFn } from './anim';
 import { Effects, addMat } from './effects';
+import { sfx } from '../lib/sfx';
 import { buildRobot, posesOf, setPose, toPose, type Pose, type PoseName, type Robot } from './robot';
 
 export type Side = 0 | 1;
@@ -400,6 +401,7 @@ export class Stage {
     if (!r) return;
     const c = ELEMENT_INFO[r.spec.element].color;
     r.root.scale.setScalar(0.01);
+    sfx('reveal');
     this.fx.sphere(new THREE.Vector3(0, 1, 0), c, 1.6, 0.5);
     this.fx.ring(new THREE.Vector3(0, 0.03, 0), c, 2.4, 0.8);
     this.fx.burst(new THREE.Vector3(0, 1, 0), c, { count: 50, speed: 5, size: 0.2, life: 0.7 });
@@ -422,6 +424,7 @@ export class Stage {
       setPose(r, posesOf(r).cast);
       await this.tw.add(0.4, (k) => (r.root.position.y = lerp(6, 0, k)), Ease.inQuad);
       const c = this.color(i);
+      sfx('land');
       this.fx.ring(this.feet(i), c, 2.4, 0.6);
       this.fx.burst(this.feet(i), c, { count: 30, speed: 4, up: 1.2, size: 0.22, life: 0.6 });
       this.shake(0.3);
@@ -463,6 +466,7 @@ export class Stage {
       this.moveX(side, tx, fast ? 0.18 : 0.24, Ease.inCubic),
     ]);
     for (let i = 0; i < hits; i++) {
+      sfx('swing');
       await this.pose(side, strike, 0.09, Ease.outQuad);
       const at = this.chest(foe);
       if (swing) {
@@ -488,6 +492,7 @@ export class Stage {
     await Promise.all([this.pose(side, 'aim', 0.2), this.face(side, true, 0.2)]);
     for (let i = 0; i < hits; i++) {
       const from = this.world(r.muzzle);
+      sfx('shot');
       this.fx.burst(from, c, { count: 10, speed: 2.4, size: 0.25, life: 0.15 });
       await this.fx.projectile(from, this.chest(foe), c, 0.16, heavy ? 0.2 : 0.12);
       this.fx.burst(this.chest(foe), c, { count: 16, speed: 4, size: 0.2, life: 0.3 });
@@ -504,6 +509,7 @@ export class Stage {
     const c = '#b05cff';
     await Promise.all([this.pose(side, 'aim', 0.2), this.face(side, true, 0.2)]);
     const from = this.world(r.tip);
+    sfx('orb');
     this.fx.gather(() => from, c, 0.35, 60);
     await this.wait(0.35);
     await this.fx.projectile(from, this.chest(foe), c, 0.45, 0.22);
@@ -517,6 +523,7 @@ export class Stage {
   async skillCast(side: Side) {
     const r = this.robots[side]!;
     const c = this.color(side);
+    sfx('skill');
     this.fx.ring(this.feet(side), c, 1.6, 0.6);
     this.fx.aura(() => this.feet(side), c, 0.7, 70, 0.55);
     this.fx.gather(() => this.world(r.core), c, 0.6, 60);
@@ -526,6 +533,7 @@ export class Stage {
 
   async healFx(side: Side) {
     const c = '#5dffa0';
+    sfx('heal');
     this.fx.ring(this.feet(side), c, 1.4, 0.6);
     this.fx.burst(this.chest(side, 0.6), c, { count: 26, speed: 0.6, up: 2.2, size: 0.2, life: 0.9, drag: 0.4, spread: new THREE.Vector3(1, 1.2, 1) });
     await this.wait(0.5);
@@ -533,6 +541,7 @@ export class Stage {
 
   async buffFx(side: Side, good: boolean) {
     const c = good ? '#ffd84a' : '#b05cff';
+    sfx(good ? 'buff' : 'debuff');
     if (good) {
       this.fx.aura(() => this.feet(side), c, 0.5, 60, 0.5);
       this.fx.ring(this.feet(side), c, 1.3, 0.5);
@@ -546,6 +555,7 @@ export class Stage {
   async counterStance(side: Side) {
     const r = this.robots[side]!;
     await this.pose(side, 'guard', 0.18);
+    sfx('counter');
     this.fx.ring(this.chest(side), '#ffd84a', 1.3, 0.5, false, 0.1);
     this.fx.burst(this.world(r.core), '#ffd84a', { count: 20, speed: 2.5, size: 0.18, life: 0.4 });
     await this.wait(0.45);
@@ -553,6 +563,7 @@ export class Stage {
   }
 
   async counterStrike(side: Side, onImpact: ImpactFn) {
+    sfx('counter');
     this.fx.burst(this.chest(side), '#ffd84a', { count: 16, speed: 3, size: 0.2, life: 0.3 });
     await this.melee(side, 1, onImpact, true);
   }
@@ -560,6 +571,7 @@ export class Stage {
   async guard(side: Side) {
     const c = this.color(side);
     await this.pose(side, 'guard', 0.2, Ease.outBack);
+    sfx('guard');
     this.setGuard(side, true, c);
     await this.wait(0.3);
   }
@@ -598,6 +610,7 @@ export class Stage {
   hit(side: Side, o: { crit?: boolean; guarded?: boolean; big?: boolean } = {}) {
     const r = this.robots[side];
     if (!r || this.down[side]) return;
+    sfx(o.guarded ? 'guard' : o.crit || o.big ? 'crit' : 'hit');
     r.setFlash(1);
     this.tw.add(0.22, (k) => r.setFlash(1 - k), Ease.linear);
     const at = this.chest(side);
@@ -634,6 +647,7 @@ export class Stage {
     if (!r) return;
     this.down[side] = true;
     this.setGuard(side, false);
+    sfx('ko');
     const at = this.chest(side);
     this.fx.sphere(at, '#ffaa55', 1.7, 0.6);
     this.fx.burst(at, '#ffcc66', { count: 60, speed: 7, size: 0.26, life: 0.7 });
@@ -646,6 +660,7 @@ export class Stage {
         await this.wait(0.22);
         const p = this.chest(side, 0.4 + Math.random() * 0.6);
         p.x += (Math.random() - 0.5) * 0.8;
+        sfx('boom');
         this.fx.sphere(p, '#ff7a3a', 0.7, 0.4);
         this.fx.burst(p, '#ffaa55', { count: 18, speed: 4, size: 0.2, life: 0.4 });
         this.shake(0.25);
@@ -706,11 +721,13 @@ export class Stage {
     this.dim(true);
     const front = new THREE.Vector3(p.x + dir * 2.7, 1.55, p.z + 3.1);
     const look = new THREE.Vector3(p.x, r.chestY, p.z);
+    sfx('charge');
     await Promise.all([this.camTo(front, look, 0.45), this.pose(side, 'charge', 0.35, Ease.outBack)]);
     this.fx.ring(this.feet(side), c, 2.3, 0.7);
     this.fx.aura(() => this.feet(side), c, 1.3, 40, 0.75);
     this.fx.gather(() => this.world(r.core), c, 1.1, 30);
     r.setEyes(1.8);
+    sfx('cutin');
     onBanner();
     await this.wait(1.2);
     this.fx.sphere(this.world(r.core), c, 0.9, 0.35);
@@ -756,6 +773,7 @@ export class Stage {
     const to = this.chest(foe);
     to.x += this.dir(side) * 3;
     this.fx.sphere(from, c, 0.6, 0.3);
+    sfx('beam');
     this.fx.beam(from, to, c, 0.55, 1.1);
     await this.wait(0.22);
     this.fx.sphere(this.chest(foe), c, 1.4, 0.6);
@@ -771,6 +789,7 @@ export class Stage {
     const pass = this.moveX(side, this.homeX[foe] + dir * 1.4, 0.2, Ease.inCubic);
     await this.wait(0.1);
     await this.pose(side, 'slash', 0.06);
+    sfx('slash');
     const at = this.chest(foe);
     this.fx.arc(at, c, 1.9, new THREE.Euler(0.3, 0, -0.6), 0.6, Math.PI * 1.4);
     this.fx.arc(at, '#ffffff', 1.6, new THREE.Euler(0.3, 0, -0.5), 0.45, Math.PI * 1.2);
@@ -791,7 +810,9 @@ export class Stage {
       const target = this.chest(foe);
       target.x += (Math.random() - 0.5) * 0.5;
       const from = target.clone().add(new THREE.Vector3((Math.random() - 0.5) * 3, 8, -3));
+      sfx('orb');
       await this.fx.projectile(from, target, c, 0.28, 0.34);
+      sfx('boom');
       this.fx.sphere(target, c, 1.3, 0.45);
       this.fx.burst(target, c, { count: 30, speed: 6, size: 0.24, life: 0.5 });
       this.fx.ring(this.feet(foe), c, 2.2, 0.5);
@@ -813,6 +834,7 @@ export class Stage {
       this.moveX(side, this.homeX[foe] - dir * 1.25, 0.24, Ease.inCubic),
     ]);
     await this.pose(side, 'thrust', 0.08);
+    sfx('boom');
     const at = this.chest(foe);
     this.fx.sphere(at, c, 2.6, 0.8);
     this.fx.ring(this.feet(foe), c, 4, 0.8);
@@ -834,8 +856,10 @@ export class Stage {
     for (let i = 0; i < hits; i++) {
       const last = i === hits - 1;
       if (last) await this.pose(side, 'pullback', 0.12);
+      sfx(last ? 'slash' : 'swing');
       await this.pose(side, last ? 'uppercut' : seq[i % seq.length], last ? 0.1 : 0.07, Ease.outQuad);
-      const at = this.chest(foe, 0.8 + Math.random() * 0.5);
+      const at = this.chest(foe);
+      at.y += (Math.random() - 0.5) * 0.5;
       this.fx.arc(at, i % 2 ? '#ffffff' : c, last ? 1.6 : 0.9, new THREE.Euler(Math.random(), 0, Math.random() * 3), 0.3);
       this.fx.burst(at, c, { count: last ? 50 : 14, speed: last ? 8 : 5, size: 0.22, life: 0.35 });
       if (last) this.fx.sphere(at, c, 1.5, 0.5);

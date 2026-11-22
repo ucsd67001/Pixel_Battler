@@ -8,6 +8,7 @@ import {
 import { ELEMENT_INFO, SKILL_TABLE } from '../game/data';
 import type { Stage } from '../three/stage';
 import { StageView } from './StageView';
+import { sfx } from '../lib/sfx';
 
 interface SideHud {
   hp: number;
@@ -231,8 +232,10 @@ export function Battle({
     await s.intro();
     if (!alive.current) return;
     setSplash('READY');
+    sfx('ready');
     await s.wait(0.9);
     setSplash('FIGHT!');
+    sfx('fight');
     await s.wait(0.75);
     setSplash(null);
 
@@ -274,6 +277,7 @@ export function Battle({
     setSplash(null);
     await s.victory(st.winner);
     setMsg(st.winner === 0 ? `${player.spec.name} の勝利！` : `${chars[1].spec.name} の勝利…`);
+    sfx(st.winner === 0 ? 'win' : 'lose');
     setResult(st.winner === 0 ? 'win' : 'lose');
     setPhase('over');
   };
@@ -288,6 +292,11 @@ export function Battle({
   const skillReady = me.sp >= player.skill.spCost && me.cooldown === 0;
   const ultReady = me.gauge >= MAX_GAUGE;
   const cmdOn = phase === 'command';
+  const wasReady = useRef(false);
+  useEffect(() => {
+    if (ultReady && !wasReady.current) sfx('gauge');
+    wasReady.current = ultReady;
+  }, [ultReady]);
 
   return (
     <div className="screen battle-screen">
@@ -362,15 +371,15 @@ export function Battle({
           </div>
         ) : (
           <div className={`commands${cmdOn ? '' : ' wait'}`}>
-            <button className="cmd attack" disabled={!cmdOn} onClick={() => choose('attack')}>
+            <button className="cmd attack" data-sfx="select" disabled={!cmdOn} onClick={() => choose('attack')}>
               <span className="cmd-main">攻撃</span>
               <span className="cmd-sub">ATTACK</span>
             </button>
-            <button className="cmd guard" disabled={!cmdOn} onClick={() => choose('guard')}>
+            <button className="cmd guard" data-sfx="select" disabled={!cmdOn} onClick={() => choose('guard')}>
               <span className="cmd-main">防御</span>
               <span className="cmd-sub">ダメージ6割減・SP+15</span>
             </button>
-            <button className="cmd skill" disabled={!cmdOn || !skillReady} onClick={() => choose('skill')}>
+            <button className="cmd skill" data-sfx="select" disabled={!cmdOn || !skillReady} onClick={() => choose('skill')}>
               <span className="cmd-main">{player.skill.name}</span>
               <span className="cmd-sub">
                 {me.cooldown > 0
@@ -378,7 +387,7 @@ export function Battle({
                   : `SP ${player.skill.spCost} ・ ${SKILL_TABLE[player.skill.kind].label}`}
               </span>
             </button>
-            <button className={`cmd ult${ultReady ? ' ready' : ''}`} disabled={!cmdOn || !ultReady} onClick={() => choose('ultimate')}>
+            <button className={`cmd ult${ultReady ? ' ready' : ''}`} data-sfx="select" disabled={!cmdOn || !ultReady} onClick={() => choose('ultimate')}>
               <span className="cmd-main">{ultReady ? player.spec.ultimate.name : '必殺技'}</span>
               <span className="cmd-sub">{ultReady ? 'READY!' : `ゲージ ${me.gauge}%`}</span>
             </button>
