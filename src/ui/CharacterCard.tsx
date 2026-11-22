@@ -45,8 +45,8 @@ export function CharacterCard({ c, compact }: { c: Character; compact?: boolean 
       <div className="stats">
         <StatBar label="HP" value={c.stats.hp} range={STAT_RANGE.hp} />
         <StatBar label="SP" value={c.stats.sp} range={STAT_RANGE.sp} />
-        <StatBar label="ATK" value={c.stats.atk} range={STAT_RANGE.atk} />
-        <StatBar label="DEF" value={c.stats.def} range={STAT_RANGE.def} />
+        <StatBar label="こうげき" value={c.stats.atk} range={STAT_RANGE.atk} />
+        <StatBar label="ぼうぎょ" value={c.stats.def} range={STAT_RANGE.def} />
       </div>
       {!compact && (
         <div className="abilities">
@@ -63,7 +63,7 @@ export function CharacterCard({ c, compact }: { c: Character; compact?: boolean 
             <div className="ab-tag">ULTIMATE</div>
             <div className="ab-name">{s.ultimate.name}</div>
             <div className="ab-meta">{ULT_TABLE[s.ultimate.style].label} ・ 必殺ゲージ MAX で発動</div>
-            <div className="ab-effect">威力3.0倍{ULT_TABLE[s.ultimate.style].hits > 1 ? `（${ULT_TABLE[s.ultimate.style].hits}回に分けて）` : ''}。防御されても半分は通る</div>
+            <div className="ab-effect">3倍のパワー{ULT_TABLE[s.ultimate.style].hits > 1 ? `（${ULT_TABLE[s.ultimate.style].hits}回に分けて）` : ''}。ガードされても半分は当たる</div>
             {s.ultimate.description && <div className="ab-flavor">{s.ultimate.description}</div>}
           </div>
           <div className="ability trait">

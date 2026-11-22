@@ -11,12 +11,12 @@ import { Showcase } from './StageView';
 import { sfx } from '../lib/sfx';
 
 const SCAN_LINES = [
-  '写真を読み込んでいます',
+  '写真を読みこんでいます',
   'いちばん目立つものを探しています',
   'モチーフを決めています',
   'フレームを組み立てています',
-  '武装を選んでいます',
-  '能力を調整しています',
+  '武器を選んでいます',
+  'パワーを調整しています',
   '最終チェック中',
 ];
 
@@ -65,7 +65,7 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
     let ch = findBySeed(img.hash);
     let n = '';
     if (ch) {
-      n = 'この写真からは、前にも同じ機体が生まれています。';
+      n = 'この写真からは、前にも同じロボが生まれています。';
     } else {
       try {
         const r = await analyze(img.dataUrl, img.hash);
@@ -133,8 +133,8 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
             <span />
           </div>
           <div className="dz-main">写真を選ぶ</div>
-          <div className="dz-sub">ここに画像を落とすか、押して選んでください</div>
-          <div className="dz-hint">写真の中のいちばん特徴的なものから、ロボが生まれます。同じ写真からは、いつも同じロボ。</div>
+          <div className="dz-sub">ここに画像を落とすか、タップして選んでください</div>
+          <div className="dz-hint">写真の中でいちばん目立つものから、ロボが生まれます。同じ写真からは、いつも同じロボ。</div>
           <input
             ref={input}
             type="file"
@@ -199,7 +199,7 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
           <CharacterCard c={char!} />
           <div className="actions">
             <button className="btn primary big" onClick={() => onFight(char!)}>
-              出撃する
+              バトルへ！
             </button>
             <button
               className="btn ghost"

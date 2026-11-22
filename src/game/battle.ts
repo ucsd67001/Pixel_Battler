@@ -202,11 +202,11 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
 
   switch (type) {
     case 'attack':
-      res.name = '攻撃';
+      res.name = 'アタック';
       hit(1.0);
       break;
     case 'guard':
-      res.name = '防御';
+      res.name = 'ガード';
       A.guarding = true;
       A.sp = Math.min(A.c.stats.sp, A.sp + 15);
       addGauge(A, 10);
@@ -230,31 +230,31 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
         }
         case 'breaker':
           hit(1.5, { ignoreGuard: true });
-          addBuff(D, { stat: 'def', mult: 0.7, turns: 3, fresh: false, label: '防御ダウン' });
-          res.buffs.push({ target: d, label: '防御ダウン', good: false });
+          addBuff(D, { stat: 'def', mult: 0.7, turns: 3, fresh: false, label: 'ぼうぎょダウン' });
+          res.buffs.push({ target: d, label: 'ぼうぎょダウン', good: false });
           break;
         case 'heal':
           heal(A.c.stats.hp * 0.32);
           break;
         case 'powerup':
-          addBuff(A, { stat: 'atk', mult: 1.6, turns: 3, fresh: true, label: '攻撃アップ' });
+          addBuff(A, { stat: 'atk', mult: 1.6, turns: 3, fresh: true, label: 'こうげきアップ' });
           addGauge(A, 25);
-          res.buffs.push({ target: a, label: '攻撃アップ', good: true });
+          res.buffs.push({ target: a, label: 'こうげきアップ', good: true });
           break;
         case 'fortify':
-          addBuff(A, { stat: 'def', mult: 1.6, turns: 3, fresh: true, label: '防御アップ' });
-          res.buffs.push({ target: a, label: '防御アップ', good: true });
+          addBuff(A, { stat: 'def', mult: 1.6, turns: 3, fresh: true, label: 'ぼうぎょアップ' });
+          res.buffs.push({ target: a, label: 'ぼうぎょアップ', good: true });
           heal(A.c.stats.hp * 0.15);
           addGauge(A, 15);
           break;
         case 'hex':
           hit(0.8);
-          addBuff(D, { stat: 'atk', mult: 0.7, turns: 3, fresh: false, label: '攻撃ダウン' });
-          res.buffs.push({ target: d, label: '攻撃ダウン', good: false });
+          addBuff(D, { stat: 'atk', mult: 0.7, turns: 3, fresh: false, label: 'こうげきダウン' });
+          res.buffs.push({ target: d, label: 'こうげきダウン', good: false });
           break;
         case 'counter':
           A.counter = true;
-          res.buffs.push({ target: a, label: '反撃の構え', good: true });
+          res.buffs.push({ target: a, label: 'カウンターの構え', good: true });
           break;
       }
       break;

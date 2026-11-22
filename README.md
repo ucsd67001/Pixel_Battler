@@ -83,3 +83,12 @@ cd C:\Users\ucsd6\dev\snapgear; firebase functions:secrets:set ALLOWED_EMAILS --
 
 - プレイヤー同士・いろいろなCPU
 - 写真から3Dモデルを作るサービスとの組み合わせ（見た目の自由度を上げる）
+
+## 小学6年生向けの言葉
+
+メインの遊び手は小学6年生。画面の言葉・キャラ名・技名は、**小学校で習う漢字（1026字）だけ**で書き、ほかはひらがな・カタカナにする。
+
+- 字の表：`src/game/kanji.ts`（学年別漢字配当表）
+- 画面の言葉の点検：`npm run check:kanji`（コメントとAIへの指示は数えない）
+- AIが作る名前：指示に書いたうえで、習わない漢字が入っていたら、その字を名指しして一度だけ作り直す（`server/analyze.ts`）
+- 指示を大きく変えたら、`server/analyze.ts` の `CACHE_VERSION` を上げる（同じ写真でも、前の指示の設計図を返さないため）

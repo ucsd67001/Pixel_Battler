@@ -82,13 +82,13 @@ function SidePanel({ c, h, side }: { c: Character; h: SideHud; side: Side }) {
         <span className="hud-num small">{h.sp}</span>
       </div>
       <div className="hud-row thin">
-        <span className="hud-tag">OD</span>
+        <span className="hud-tag">必殺</span>
         <Gauge value={h.gauge} max={MAX_GAUGE} kind="od" />
         <span className="hud-num small">{h.gauge >= MAX_GAUGE ? 'MAX' : `${h.gauge}%`}</span>
       </div>
       <div className="hud-status">
-        {h.guarding && <span className="st good">防御中</span>}
-        {h.counter && <span className="st good">反撃の構え</span>}
+        {h.guarding && <span className="st good">ガード中</span>}
+        {h.counter && <span className="st good">カウンターの構え</span>}
         {h.buffs.map((b) => (
           <span key={b} className={`st ${b.includes('ダウン') ? 'bad' : 'good'}`}>
             {b}
@@ -162,7 +162,7 @@ export function Battle({
   const applyHit = (h: Hit, big = false) => {
     patch(h.target, { hp: h.hpAfter });
     popup(h.target, String(h.amount), h.crit ? 'crit' : 'dmg');
-    if (h.guts) popup(h.target, '不屈！ HP1で耐えた', 'good', 40);
+    if (h.guts) popup(h.target, 'ど根性！ HP1でふみとどまった', 'good', 40);
     else if (h.crit) popup(h.target, 'CRITICAL!', 'info', 40);
     else if (h.guarded) popup(h.target, 'GUARD', 'info', 40);
     else if (h.eff > 1) popup(h.target, '効果ばつぐん！', 'good', 40);
@@ -181,11 +181,11 @@ export function Battle({
 
     switch (res.type) {
       case 'attack':
-        setMsg(`${A.spec.name} の攻撃！`);
+        setMsg(`${A.spec.name} の アタック！`);
         await s.attack(a, res.hits.length, onHit);
         break;
       case 'guard':
-        setMsg(`${A.spec.name} は 身を守っている`);
+        setMsg(`${A.spec.name} は ガードしている`);
         popup(a, 'GUARD', 'info');
         await s.guard(a);
         break;
@@ -219,7 +219,7 @@ export function Battle({
       await s.buffFx(b.target, b.good);
     }
     if (res.counterHit && alive.current) {
-      setMsg(`${chars[d].spec.name} の 反撃！`);
+      setMsg(`${chars[d].spec.name} の カウンター！`);
       popup(d, 'COUNTER!', 'info', 20);
       await s.counterStrike(d, () => applyHit(res.counterHit!));
     }
@@ -270,7 +270,7 @@ export function Battle({
     }
     if (!alive.current || st.winner === null) return;
     const loser = foe(st.winner);
-    setMsg(`${chars[loser].spec.name} は 倒れた`);
+    setMsg(`${chars[loser].spec.name} は たおれた`);
     await s.ko(loser);
     setSplash('K.O.');
     await s.wait(1.0);
@@ -321,7 +321,7 @@ export function Battle({
             ×{speed}
           </button>
           <button className="btn tiny ghost" onClick={onExit}>
-            退却
+            にげる
           </button>
         </div>
         <SidePanel c={chars[1]} h={hud[1]} side={1} />
@@ -372,12 +372,12 @@ export function Battle({
         ) : (
           <div className={`commands${cmdOn ? '' : ' wait'}`}>
             <button className="cmd attack" data-sfx="select" disabled={!cmdOn} onClick={() => choose('attack')}>
-              <span className="cmd-main">攻撃</span>
+              <span className="cmd-main">アタック</span>
               <span className="cmd-sub">ATTACK</span>
             </button>
             <button className="cmd guard" data-sfx="select" disabled={!cmdOn} onClick={() => choose('guard')}>
-              <span className="cmd-main">防御</span>
-              <span className="cmd-sub">ダメージ6割減・SP+15</span>
+              <span className="cmd-main">ガード</span>
+              <span className="cmd-sub">ダメージ6割カット・SP+15</span>
             </button>
             <button className="cmd skill" data-sfx="select" disabled={!cmdOn || !skillReady} onClick={() => choose('skill')}>
               <span className="cmd-main">{player.skill.name}</span>

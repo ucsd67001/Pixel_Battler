@@ -7,7 +7,7 @@ import { defineSecret } from 'firebase-functions/params';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
-import { analyzeImage, type SpecCache } from '../../server/analyze';
+import { analyzeImage, cacheKey, type SpecCache } from '../../server/analyze';
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 const ALLOWED_EMAILS = defineSecret('ALLOWED_EMAILS'); // カンマ区切り
@@ -93,7 +93,7 @@ export const api = onRequest(
       const image = String(body?.image ?? '');
       const hash = String(body?.hash ?? '');
       // 取っておいたものがあれば、回数に数えずに返す
-      const hit = /^[a-f0-9]{64}$/.test(hash) ? await cache.get(hash).catch(() => null) : null;
+      const hit = /^[a-f0-9]{64}$/.test(hash) ? await cache.get(cacheKey(hash)).catch(() => null) : null;
       if (!hit && !(await countUp(user.uid))) {
         res.status(429).json({ error: 'daily limit' });
         return;

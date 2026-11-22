@@ -5,21 +5,21 @@ import { SKILL_TABLE } from './data';
 import { type ActionType, type BattleState, type Rng, type Side, canUse, foe, MAX_GAUGE } from './battle';
 
 const CPU_SPEC: CharacterSpec = {
-  motif: '古い闘技場の鉄の門',
+  motif: '古い鉄の門',
   name: 'ヴォルテクス',
   title: '試練の番人',
-  description: '挑む者の力を量るため、闘技場の門から生まれた番人。重い鉄槌で、迷いごと打ち砕く。',
+  description: '古い鉄の門から生まれた番人。戦いに来た者の力をたしかめ、重いハンマーで守りごとたたきつぶす。',
   form: 'humanoid',
   element: 'dark',
   bias: { hp: 4, sp: 2, atk: 3, def: 4 },
   parts: { head: 'mono', body: 'heavy', arms: 'heavy', legs: 'heavy', back: 'cannons', weapon: 'hammer' },
   colors: { primary: '#3a3f4d', secondary: '#9aa3b5', accent: '#ff3b5c', eye: '#ff2a4a' },
-  skill: { name: '重圧の鉄槌', kind: 'breaker', description: '守りの上から叩き伏せる、門番の一撃' },
+  skill: { name: '鉄門ハンマー', kind: 'breaker', description: 'ガードの上から、まとめてたたきつぶす' },
   ultimate: {
-    name: 'アビス・クラッシャー',
+    name: 'ギガ・クラッシャー',
     style: 'meteor',
-    description: '闇の鉄塊を降らせ、闘技場ごと押しつぶす',
-    shout: '試練を、越えてみせろ！',
+    description: '夜空から鉄のかたまりを落とし、まわりごとおしつぶす',
+    shout: 'この試練、のりこえてみせろ！',
   },
   trait: 'ironwall',
 };
@@ -53,8 +53,8 @@ export function chooseAction(st: BattleState, side: Side, rng: Rng): ActionType 
   if (skillOk && (kind === 'fortify' || kind === 'counter') && op.gauge >= MAX_GAUGE) return 'skill';
   if (op.gauge >= MAX_GAUGE && rng() < 0.5) return 'guard';
   if (skillOk && SKILL_TABLE[kind].damaging && rng() < 0.7) return 'skill';
-  if (skillOk && kind === 'powerup' && !me.buffs.some((b) => b.label === '攻撃アップ')) return 'skill';
-  if (skillOk && kind === 'fortify' && hpRatio < 0.7 && !me.buffs.some((b) => b.label === '防御アップ'))
+  if (skillOk && kind === 'powerup' && !me.buffs.some((b) => b.label === 'こうげきアップ')) return 'skill';
+  if (skillOk && kind === 'fortify' && hpRatio < 0.7 && !me.buffs.some((b) => b.label === 'ぼうぎょアップ'))
     return 'skill';
   if (skillOk && kind === 'counter' && rng() < 0.35) return 'skill';
   if (hpRatio < 0.3 && rng() < 0.2) return 'guard';

@@ -17,7 +17,7 @@ function loadImg(file: File): Promise<HTMLImageElement> {
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error('画像を読み込めませんでした'));
+      reject(new Error('画像を読みこめませんでした'));
     };
     img.src = url;
   });

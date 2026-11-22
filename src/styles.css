@@ -552,7 +552,7 @@ button {
 }
 .stat {
   display: grid;
-  grid-template-columns: 38px 1fr 48px;
+  grid-template-columns: 52px 1fr 48px;
   align-items: center;
   gap: 8px;
 }
@@ -757,6 +757,8 @@ button {
   font-family: var(--mono);
   font-size: 10px;
   color: var(--muted);
+  min-width: 22px;
+  text-align: center;
 }
 .hud-num {
   font-family: var(--mono);

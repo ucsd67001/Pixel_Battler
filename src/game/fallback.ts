@@ -52,7 +52,7 @@ export function localSpec(seed: string, colors: string[]): CharacterSpec {
     motif: '写真の色',
     name: choose(NAME_A) + choose(NAME_B),
     title: `${el.label}をまとう者`,
-    description: '写真の色から組み上げられた機体。AIの解析なしで生まれた、素のままの姿。',
+    description: '写真の色から組み上げられたロボ。AIの読み取りなしで生まれた、そのままのすがた。',
     form: choose(FORMS),
     element,
     bias: { hp: lv(), sp: lv(), atk: lv(), def: lv() },
@@ -72,7 +72,7 @@ export function localSpec(seed: string, colors: string[]): CharacterSpec {
     },
     skill: { name: `${el.label}の${SKILL_TABLE[kind].label}`, kind, description: '' },
     ultimate: {
-      name: `${el.en}・${ULT_TABLE[style].label}`,
+      name: `メガ${ULT_TABLE[style].label}`,
       style,
       description: '',
       shout: 'これで決める！',

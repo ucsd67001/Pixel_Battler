@@ -40,12 +40,12 @@ export function Title({
           )}
           {hangar.length > 0 && (
             <button className="btn ghost" onClick={onHangar}>
-              格納庫（{hangar.length}体）
+              ガレージ（{hangar.length}体）
             </button>
           )}
         </div>
         <div className="status-line">
-          {ai === null ? '…' : ai.ai ? `AI解析：オン（${ai.model}）` : 'AI解析：オフ（写真の色から作ります）'}
+          {ai === null ? '…' : ai.ai ? `AIの読み取り：オン（${ai.model}）` : 'AIの読み取り：オフ（写真の色から作ります）'}
         </div>
       </div>
     </div>

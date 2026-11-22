@@ -10,7 +10,7 @@ export function Hangar({ onFight, onBack }: { onFight: (c: Character) => void; o
   const [sel, setSel] = useState<Character | null>(list[0] ?? null);
 
   const remove = (c: Character) => {
-    if (!window.confirm(`${c.spec.name} を格納庫から消しますか？（元に戻せません）`)) return;
+    if (!window.confirm(`${c.spec.name} をガレージから消しますか？（もとにもどせません）`)) return;
     deleteCharacter(c.id);
     const next = loadHangar();
     setList(next);
@@ -23,10 +23,10 @@ export function Hangar({ onFight, onBack }: { onFight: (c: Character) => void; o
         <button className="btn ghost small" onClick={onBack}>
           ◀ タイトル
         </button>
-        <span className="bar-title">HANGAR</span>
+        <span className="bar-title">GARAGE</span>
       </header>
       {list.length === 0 ? (
-        <div className="empty">まだ機体がありません。</div>
+        <div className="empty">まだロボがいません。</div>
       ) : (
         <div className="split">
           <div className="split-stage">
@@ -51,10 +51,10 @@ export function Hangar({ onFight, onBack }: { onFight: (c: Character) => void; o
               <CharacterCard c={sel} />
               <div className="actions">
                 <button className="btn primary big" onClick={() => onFight(sel)}>
-                  出撃する
+                  バトルへ！
                 </button>
                 <button className="btn ghost danger" onClick={() => remove(sel)}>
-                  格納庫から消す
+                  ガレージから消す
                 </button>
               </div>
             </div>
