@@ -12,3 +12,6 @@ functions/lib/
 .firebase/
 firebase-debug.log
 firestore-debug.log
+
+# Claude の申し送りのうち、公開しないもの
+CLAUDE.local.md
