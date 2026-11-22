@@ -1,7 +1,7 @@
 // AIにつながらないときに、写真の色だけからキャラを作る（遊べなくならないための予備）
 
 import {
-  ARMS, BACKS, BODIES, HEADS, LEGS, SKILL_KINDS, TRAITS, ULT_STYLES, WEAPONS,
+  ARMS, BACKS, BODIES, FORMS, HEADS, LEGS, SKILL_KINDS, TRAITS, ULT_STYLES, WEAPONS,
   type CharacterSpec, type Element,
 } from './types';
 import { ELEMENT_INFO, SKILL_TABLE, ULT_TABLE } from './data';
@@ -53,6 +53,7 @@ export function localSpec(seed: string, colors: string[]): CharacterSpec {
     name: choose(NAME_A) + choose(NAME_B),
     title: `${el.label}をまとう者`,
     description: '写真の色から組み上げられた機体。AIの解析なしで生まれた、素のままの姿。',
+    form: choose(FORMS),
     element,
     bias: { hp: lv(), sp: lv(), atk: lv(), def: lv() },
     parts: {

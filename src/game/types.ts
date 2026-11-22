@@ -1,5 +1,6 @@
 // キャラの設計図（AIが写真から決める部分）と、ゲームで使う形
 
+export const FORMS = ['humanoid', 'beast', 'floater'] as const;
 export const ELEMENTS = ['blaze', 'tide', 'verdant', 'light', 'dark'] as const;
 export const HEADS = ['vfin', 'horns', 'mono', 'crest', 'ears', 'crown'] as const;
 export const BODIES = ['standard', 'slim', 'heavy'] as const;
@@ -13,6 +14,7 @@ export const SKILL_KINDS = [
 export const ULT_STYLES = ['beam', 'slash', 'meteor', 'burst', 'rush'] as const;
 export const TRAITS = ['first', 'guts', 'pierce', 'regen', 'focus', 'ironwall', 'fighter', 'lucky'] as const;
 
+export type Form = (typeof FORMS)[number];
 export type Element = (typeof ELEMENTS)[number];
 export type HeadType = (typeof HEADS)[number];
 export type BodyType = (typeof BODIES)[number];
@@ -36,6 +38,7 @@ export interface CharacterSpec {
   name: string;
   title: string;
   description: string;
+  form: Form;
   element: Element;
   bias: Bias;
   parts: {

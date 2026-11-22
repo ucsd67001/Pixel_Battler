@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { Character } from '../game/types';
-import { ELEMENT_INFO, SKILL_TABLE, TRAIT_TABLE, ULT_TABLE, WEAPON_LABEL } from '../game/data';
+import { ELEMENT_INFO, FORM_INFO, SKILL_TABLE, TRAIT_TABLE, ULT_TABLE, WEAPON_LABEL } from '../game/data';
 import { STAT_RANGE } from '../game/stats';
 
 function StatBar({ label, value, range }: { label: string; value: number; range: { min: number; max: number } }) {
@@ -38,6 +38,7 @@ export function CharacterCard({ c, compact }: { c: Character; compact?: boolean 
         <span className="chip el">
           {el.label} <b>{el.en}</b>
         </span>
+        <span className="chip">体：{FORM_INFO[s.form ?? 'humanoid'].label}</span>
         <span className="chip">特性：{tr.label}</span>
         <span className="chip">武器：{WEAPON_LABEL[s.parts.weapon]}</span>
       </div>

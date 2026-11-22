@@ -1,4 +1,10 @@
-import type { Element, SkillKind, Trait, UltStyle, WeaponType } from './types';
+import type { Element, Form, SkillKind, Trait, UltStyle, WeaponType } from './types';
+
+export const FORM_INFO: Record<Form, { label: string; en: string }> = {
+  humanoid: { label: '人型', en: 'HUMANOID' },
+  beast: { label: '獣型', en: 'BEAST' },
+  floater: { label: '浮遊型', en: 'FLOATER' },
+};
 
 export const ELEMENT_INFO: Record<Element, { label: string; en: string; color: string }> = {
   blaze: { label: '炎', en: 'BLAZE', color: '#ff5a2a' },

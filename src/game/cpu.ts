@@ -9,6 +9,7 @@ const CPU_SPEC: CharacterSpec = {
   name: 'ヴォルテクス',
   title: '試練の番人',
   description: '挑む者の力を量るため、闘技場の門から生まれた番人。重い鉄槌で、迷いごと打ち砕く。',
+  form: 'humanoid',
   element: 'dark',
   bias: { hp: 4, sp: 2, atk: 3, def: 4 },
   parts: { head: 'mono', body: 'heavy', arms: 'heavy', legs: 'heavy', back: 'cannons', weapon: 'hammer' },

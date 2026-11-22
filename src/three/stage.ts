@@ -10,7 +10,7 @@ import type { CharacterSpec, UltStyle } from '../game/types';
 import { ELEMENT_INFO } from '../game/data';
 import { Ease, lerp, Tweener, type EaseFn } from './anim';
 import { Effects, addMat } from './effects';
-import { buildRobot, POSES, setPose, toPose, type Pose, type Robot } from './robot';
+import { buildRobot, posesOf, setPose, toPose, type Pose, type PoseName, type Robot } from './robot';
 
 export type Side = 0 | 1;
 export type StageMode = 'battle' | 'showcase';
@@ -204,7 +204,7 @@ export class Stage {
       const r = buildRobot(spec);
       r.root.position.set(this.homeX[i], 0, 0);
       r.root.rotation.y = ANGLED[i];
-      setPose(r, POSES.idle);
+      setPose(r, posesOf(r).idle);
       r.root.visible = false;
       this.scene.add(r.root);
       this.robots[i] = r;
@@ -216,7 +216,7 @@ export class Stage {
     this.clearRobots();
     const r = buildRobot(spec);
     r.root.rotation.y = 0.5;
-    setPose(r, POSES.idle);
+    setPose(r, posesOf(r).idle);
     this.scene.add(r.root);
     this.robots[0] = r;
     this.rims[0].position.set(-1.6, 2.4, -1.6);
@@ -263,9 +263,11 @@ export class Stage {
     this.fx.update(dt);
     this.robots.forEach((r, i) => {
       if (!r || this.down[i]) return;
-      r.body.position.y = Math.sin(this.t * 2.4 + i * 1.7) * 0.025;
+      const amp = r.form === 'floater' ? 0.07 : 0.025;
+      r.body.position.y = Math.sin(this.t * (r.form === 'floater' ? 1.8 : 2.4) + i * 1.7) * amp;
       r.body.rotation.z = Math.sin(this.t * 1.2 + i) * 0.012;
     });
+    this.robots.forEach((r) => r?.spins.forEach((sp) => (sp.obj.rotation.z += dt * sp.speed)));
     if (this.mode === 'showcase' && this.turntable && this.robots[0]) this.robots[0].root.rotation.y += raw * 0.45;
     this.dust.rotation.y += raw * 0.015;
     this.guardFx.forEach((g) => {
@@ -311,9 +313,10 @@ export class Stage {
   private dir(side: Side) {
     return side === 0 ? 1 : -1;
   }
-  private chest(side: Side, y = 1.05) {
-    const p = this.robots[side]!.root.position;
-    return new THREE.Vector3(p.x, p.y + y, p.z);
+  private chest(side: Side, y?: number) {
+    const r = this.robots[side]!;
+    const p = r.root.position;
+    return new THREE.Vector3(p.x, p.y + (y ?? r.chestY), p.z);
   }
   private feet(side: Side) {
     const p = this.robots[side]!.root.position;
@@ -356,11 +359,12 @@ export class Stage {
     const y1 = exact ? EXACT[side] : ANGLED[side];
     return this.tw.add(dur, (k) => (r.root.rotation.y = lerp(y0, y1, k)));
   }
-  private pose(side: Side, p: Pose, dur: number, ease?: EaseFn) {
-    return toPose(this.tw, this.robots[side]!, p, dur, ease);
+  private pose(side: Side, p: Pose | PoseName, dur: number, ease?: EaseFn) {
+    const r = this.robots[side]!;
+    return toPose(this.tw, r, typeof p === 'string' ? posesOf(r)[p] : p, dur, ease);
   }
-  private restPose(side: Side) {
-    return this.guardFx[side] ? POSES.guard : POSES.idle;
+  private restPose(side: Side): PoseName {
+    return this.guardFx[side] ? 'guard' : 'idle';
   }
   private dim(on: boolean, dur = 0.4) {
     const h0 = this.hemi.intensity;
@@ -402,9 +406,9 @@ export class Stage {
     this.shake(0.2);
     await this.tw.add(0.6, (k) => r.root.scale.setScalar(Math.max(0.01, k)), Ease.outBack);
     this.fx.aura(() => new THREE.Vector3(0, 0.05, 0), c, 1.2, 50, 0.7);
-    await this.pose(0, POSES.victory, 0.45, Ease.outBack);
+    await this.pose(0, 'victory', 0.45, Ease.outBack);
     await this.wait(0.7);
-    await this.pose(0, POSES.idle, 0.5);
+    await this.pose(0, 'idle', 0.5);
   }
 
   // ── バトルの演出 ──
@@ -415,14 +419,14 @@ export class Stage {
       const r = this.robots[i]!;
       r.root.position.y = 6;
       r.root.visible = true;
-      setPose(r, POSES.cast);
+      setPose(r, posesOf(r).cast);
       await this.tw.add(0.4, (k) => (r.root.position.y = lerp(6, 0, k)), Ease.inQuad);
       const c = this.color(i);
       this.fx.ring(this.feet(i), c, 2.4, 0.6);
       this.fx.burst(this.feet(i), c, { count: 30, speed: 4, up: 1.2, size: 0.22, life: 0.6 });
       this.shake(0.3);
-      await this.pose(i, POSES.guard, 0.12);
-      await this.pose(i, POSES.idle, 0.35, Ease.outBack);
+      await this.pose(i, 'guard', 0.12);
+      await this.pose(i, 'idle', 0.35, Ease.outBack);
     };
     await Promise.all([
       this.camTo(this.basePos, this.baseLook, 1.8, Ease.inOutCubic),
@@ -448,8 +452,8 @@ export class Stage {
     const dir = this.dir(side);
     const c = this.color(side);
     const swing = ['sword', 'hammer'].includes(r.spec.parts.weapon);
-    const wind = swing ? POSES.windup : POSES.pullback;
-    const strike = swing ? POSES.slash : POSES.thrust;
+    const wind = swing ? 'windup' : 'pullback';
+    const strike = swing ? 'slash' : 'thrust';
     const home = this.homeX[side];
     const tx = this.homeX[foe] - dir * 1.2;
     this.fx.burst(this.feet(side), '#9fb4d8', { count: 10, speed: 1.6, up: 0.6, size: 0.2, life: 0.4 });
@@ -471,7 +475,7 @@ export class Stage {
     }
     await this.wait(0.22);
     await Promise.all([
-      this.pose(side, POSES.idle, 0.32),
+      this.pose(side, 'idle', 0.32),
       this.moveX(side, home, 0.34),
       this.face(side, false, 0.34),
     ]);
@@ -481,7 +485,7 @@ export class Stage {
     const r = this.robots[side]!;
     const foe = (1 - side) as Side;
     const c = this.color(side);
-    await Promise.all([this.pose(side, POSES.aim, 0.2), this.face(side, true, 0.2)]);
+    await Promise.all([this.pose(side, 'aim', 0.2), this.face(side, true, 0.2)]);
     for (let i = 0; i < hits; i++) {
       const from = this.world(r.muzzle);
       this.fx.burst(from, c, { count: 10, speed: 2.4, size: 0.25, life: 0.15 });
@@ -491,14 +495,14 @@ export class Stage {
       await this.wait(0.1);
     }
     await this.wait(0.15);
-    await Promise.all([this.pose(side, POSES.idle, 0.3), this.face(side, false, 0.3)]);
+    await Promise.all([this.pose(side, 'idle', 0.3), this.face(side, false, 0.3)]);
   }
 
   private async orb(side: Side, onImpact: ImpactFn) {
     const r = this.robots[side]!;
     const foe = (1 - side) as Side;
     const c = '#b05cff';
-    await Promise.all([this.pose(side, POSES.aim, 0.2), this.face(side, true, 0.2)]);
+    await Promise.all([this.pose(side, 'aim', 0.2), this.face(side, true, 0.2)]);
     const from = this.world(r.tip);
     this.fx.gather(() => from, c, 0.35, 60);
     await this.wait(0.35);
@@ -507,7 +511,7 @@ export class Stage {
     this.fx.burst(this.chest(foe), c, { count: 20, speed: 2, size: 0.22, life: 0.6, gravity: 2 });
     onImpact(0);
     await this.wait(0.3);
-    await Promise.all([this.pose(side, POSES.idle, 0.3), this.face(side, false, 0.3)]);
+    await Promise.all([this.pose(side, 'idle', 0.3), this.face(side, false, 0.3)]);
   }
 
   async skillCast(side: Side) {
@@ -516,7 +520,7 @@ export class Stage {
     this.fx.ring(this.feet(side), c, 1.6, 0.6);
     this.fx.aura(() => this.feet(side), c, 0.7, 70, 0.55);
     this.fx.gather(() => this.world(r.core), c, 0.6, 60);
-    await this.pose(side, POSES.cast, 0.25, Ease.outBack);
+    await this.pose(side, 'cast', 0.25, Ease.outBack);
     await this.wait(0.5);
   }
 
@@ -541,11 +545,11 @@ export class Stage {
 
   async counterStance(side: Side) {
     const r = this.robots[side]!;
-    await this.pose(side, POSES.guard, 0.18);
+    await this.pose(side, 'guard', 0.18);
     this.fx.ring(this.chest(side), '#ffd84a', 1.3, 0.5, false, 0.1);
     this.fx.burst(this.world(r.core), '#ffd84a', { count: 20, speed: 2.5, size: 0.18, life: 0.4 });
     await this.wait(0.45);
-    await this.pose(side, POSES.idle, 0.25);
+    await this.pose(side, 'idle', 0.25);
   }
 
   async counterStrike(side: Side, onImpact: ImpactFn) {
@@ -555,7 +559,7 @@ export class Stage {
 
   async guard(side: Side) {
     const c = this.color(side);
-    await this.pose(side, POSES.guard, 0.2, Ease.outBack);
+    await this.pose(side, 'guard', 0.2, Ease.outBack);
     this.setGuard(side, true, c);
     await this.wait(0.3);
   }
@@ -587,7 +591,7 @@ export class Stage {
             (m.material as THREE.Material | undefined)?.dispose();
           });
         });
-      if (!this.down[side] && this.robots[side]) this.pose(side, POSES.idle, 0.25);
+      if (!this.down[side] && this.robots[side]) this.pose(side, 'idle', 0.25);
     }
   }
 
@@ -614,7 +618,7 @@ export class Stage {
     (async () => {
       const x = r.root.position.x;
       await Promise.all([
-        this.pose(side, o.guarded ? POSES.guard : POSES.hit, 0.06),
+        this.pose(side, o.guarded ? 'guard' : 'hit', 0.06),
         this.tw.add(0.08, (k) => (r.root.position.x = x + back * push * k)),
       ]);
       if (this.down[side]) return;
@@ -649,12 +653,20 @@ export class Stage {
     };
     await Promise.all([
       boom(),
-      this.pose(side, POSES.hit, 0.15),
+      this.pose(side, 'hit', 0.15),
       this.tw.add(
         0.75,
         (k) => {
-          r.body.rotation.x = -1.42 * k;
-          r.body.position.y = 0.3 * k;
+          if (r.form === 'beast') {
+            r.body.rotation.z = 1.4 * k * -back;
+            r.body.position.y = 0.28 * k;
+          } else if (r.form === 'floater') {
+            r.body.rotation.x = -0.5 * k;
+            r.body.position.y = -0.4 * k;
+          } else {
+            r.body.rotation.x = -1.42 * k;
+            r.body.position.y = 0.3 * k;
+          }
           r.root.position.x = x0 + back * 0.6 * k;
           r.setEyes(1 - k * 0.95);
         },
@@ -674,7 +686,7 @@ export class Stage {
     const look = new THREE.Vector3(r.root.position.x, 1.0, 0);
     this.camTo(front, look, 0.9);
     await Promise.all([
-      this.pose(side, POSES.victory, 0.4, Ease.outBack),
+      this.pose(side, 'victory', 0.4, Ease.outBack),
       this.tw.add(0.45, (k) => (r.root.position.y = Math.sin(k * Math.PI) * 0.45), Ease.linear),
     ]);
     this.fx.burst(this.chest(side, 2.2), c, { count: 40, speed: 3, size: 0.2, life: 1.0, gravity: 3, up: 3 });
@@ -694,7 +706,7 @@ export class Stage {
     this.dim(true);
     const front = new THREE.Vector3(p.x + dir * 2.6, 1.35, p.z + 2.8);
     const look = new THREE.Vector3(p.x, 1.2, p.z);
-    await Promise.all([this.camTo(front, look, 0.45), this.pose(side, POSES.charge, 0.35, Ease.outBack)]);
+    await Promise.all([this.camTo(front, look, 0.45), this.pose(side, 'charge', 0.35, Ease.outBack)]);
     this.fx.ring(this.feet(side), c, 2.3, 0.7);
     this.fx.aura(() => this.feet(side), c, 1.3, 40, 0.75);
     this.fx.gather(() => this.world(r.core), c, 1.1, 30);
@@ -730,7 +742,7 @@ export class Stage {
     this.dim(false, 0.6);
     this.camHome(0.6);
     await Promise.all([
-      this.pose(side, POSES.idle, 0.35),
+      this.pose(side, 'idle', 0.35),
       this.moveX(side, home, 0.45),
       this.face(side, false, 0.4),
       this.tw.add(0.3, (k) => (r.root.position.y = lerp(r.root.position.y, 0, k))),
@@ -739,7 +751,7 @@ export class Stage {
 
   private async ultBeam(side: Side, foe: Side, c: string, onImpact: ImpactFn) {
     const r = this.robots[side]!;
-    await Promise.all([this.pose(side, POSES.aim, 0.2), this.face(side, true, 0.2)]);
+    await Promise.all([this.pose(side, 'aim', 0.2), this.face(side, true, 0.2)]);
     const from = this.world(r.tip);
     const to = this.chest(foe);
     to.x += this.dir(side) * 3;
@@ -755,10 +767,10 @@ export class Stage {
 
   private async ultSlash(side: Side, foe: Side, c: string, onImpact: ImpactFn) {
     const dir = this.dir(side);
-    await Promise.all([this.pose(side, POSES.windup, 0.18), this.face(side, true, 0.18)]);
+    await Promise.all([this.pose(side, 'windup', 0.18), this.face(side, true, 0.18)]);
     const pass = this.moveX(side, this.homeX[foe] + dir * 1.4, 0.2, Ease.inCubic);
     await this.wait(0.1);
-    await this.pose(side, POSES.slash, 0.06);
+    await this.pose(side, 'slash', 0.06);
     const at = this.chest(foe);
     this.fx.arc(at, c, 1.9, new THREE.Euler(0.3, 0, -0.6), 0.6, Math.PI * 1.4);
     this.fx.arc(at, '#ffffff', 1.6, new THREE.Euler(0.3, 0, -0.5), 0.45, Math.PI * 1.2);
@@ -772,7 +784,7 @@ export class Stage {
 
   private async ultMeteor(side: Side, foe: Side, c: string, hits: number, onImpact: ImpactFn) {
     const r = this.robots[side]!;
-    await this.pose(side, POSES.cast, 0.25, Ease.outBack);
+    await this.pose(side, 'cast', 0.25, Ease.outBack);
     this.camTo(this.basePos.clone().add(new THREE.Vector3(0, 1.2, 2)), new THREE.Vector3(0, 1.8, 0), 0.4);
     await this.tw.add(0.35, (k) => (r.root.position.y = 2.6 * k), Ease.outCubic);
     for (let i = 0; i < hits; i++) {
@@ -796,11 +808,11 @@ export class Stage {
   private async ultBurst(side: Side, foe: Side, c: string, onImpact: ImpactFn) {
     const dir = this.dir(side);
     await Promise.all([
-      this.pose(side, POSES.pullback, 0.2),
+      this.pose(side, 'pullback', 0.2),
       this.face(side, true, 0.2),
       this.moveX(side, this.homeX[foe] - dir * 1.25, 0.24, Ease.inCubic),
     ]);
-    await this.pose(side, POSES.thrust, 0.08);
+    await this.pose(side, 'thrust', 0.08);
     const at = this.chest(foe);
     this.fx.sphere(at, c, 2.6, 0.8);
     this.fx.ring(this.feet(foe), c, 4, 0.8);
@@ -814,21 +826,21 @@ export class Stage {
   private async ultRush(side: Side, foe: Side, c: string, hits: number, onImpact: ImpactFn) {
     const dir = this.dir(side);
     await Promise.all([
-      this.pose(side, POSES.pullback, 0.18),
+      this.pose(side, 'pullback', 0.18),
       this.face(side, true, 0.18),
       this.moveX(side, this.homeX[foe] - dir * 1.1, 0.2, Ease.inCubic),
     ]);
-    const seq = [POSES.thrust, POSES.slash, POSES.thrust, POSES.slash];
+    const seq: PoseName[] = ['thrust', 'slash', 'thrust', 'slash'];
     for (let i = 0; i < hits; i++) {
       const last = i === hits - 1;
-      if (last) await this.pose(side, POSES.pullback, 0.12);
-      await this.pose(side, last ? POSES.uppercut : seq[i % seq.length], last ? 0.1 : 0.07, Ease.outQuad);
+      if (last) await this.pose(side, 'pullback', 0.12);
+      await this.pose(side, last ? 'uppercut' : seq[i % seq.length], last ? 0.1 : 0.07, Ease.outQuad);
       const at = this.chest(foe, 0.8 + Math.random() * 0.5);
       this.fx.arc(at, i % 2 ? '#ffffff' : c, last ? 1.6 : 0.9, new THREE.Euler(Math.random(), 0, Math.random() * 3), 0.3);
       this.fx.burst(at, c, { count: last ? 50 : 14, speed: last ? 8 : 5, size: 0.22, life: 0.35 });
       if (last) this.fx.sphere(at, c, 1.5, 0.5);
       onImpact(i);
-      if (!last) await this.pose(side, POSES.pullback, 0.06);
+      if (!last) await this.pose(side, 'pullback', 0.06);
     }
     await this.wait(0.6);
   }

@@ -2,7 +2,7 @@
 // サーバーとブラウザの両方から使う。
 
 import {
-  ARMS, BACKS, BODIES, ELEMENTS, HEADS, LEGS, SKILL_KINDS, TRAITS, ULT_STYLES, WEAPONS,
+  ARMS, BACKS, BODIES, ELEMENTS, FORMS, HEADS, LEGS, SKILL_KINDS, TRAITS, ULT_STYLES, WEAPONS,
   type CharacterSpec, type Element,
 } from './types';
 import { ELEMENT_INFO } from './data';
@@ -22,6 +22,7 @@ export const SPEC_JSON_SCHEMA = obj({
   name: str,
   title: str,
   description: str,
+  form: en(FORMS),
   element: en(ELEMENTS),
   bias: obj({ hp: level, sp: level, atk: level, def: level }),
   parts: obj({
@@ -68,6 +69,7 @@ export function sanitizeSpec(raw: any): CharacterSpec {
     name: text(r.name, 12, 'ノーネーム'),
     title: text(r.title, 14, '名もなき戦士'),
     description: text(r.description, 70, ''),
+    form: pick(r.form, FORMS, 'humanoid'),
     element,
     bias: {
       hp: lv(r.bias?.hp),
