@@ -130,6 +130,6 @@ export function chooseAction(st: BattleState, side: Side, rng: Rng): ActionType 
   if (skillOk && kind === 'fortify' && hpRatio < 0.7 && !me.buffs.some((b) => b.label === 'ぼうぎょアップ'))
     return 'skill';
   if (skillOk && kind === 'counter' && rng() < 0.35) return 'skill';
-  if (hpRatio < 0.3 && rng() < 0.2) return 'guard';
+  if (hpRatio < 0.4 && !me.lastGuard && rng() < 0.3) return 'guard'; // ガードで回復できるので、弱ってきたら使う
   return 'attack';
 }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Character } from '../game/types';
 import { chooseAction, pickCpu } from '../game/cpu';
 import {
-  act, canUse, createBattle, endTurn, foe, MAX_GAUGE, startTurn,
+  act, canUse, createBattle, endTurn, foe, MAX_GAUGE, MAX_ROUND, roundOf, startTurn,
   type ActionResult, type ActionType, type BattleState, type Hit, type Side,
 } from '../game/battle';
 import { ELEMENT_INFO, SKILL_TABLE } from '../game/data';
@@ -153,7 +153,7 @@ export function Battle({
   const [banner, setBanner] = useState<Banner | null>(null);
   const [popups, setPopups] = useState<Popup[]>([]);
   const [splash, setSplash] = useState<string | null>(null);
-  const [result, setResult] = useState<'win' | 'lose' | null>(null);
+  const [result, setResult] = useState<'win' | 'lose' | 'draw' | null>(null);
   const [speed, setSpeed] = useState(1);
   const [round, setRound] = useState(1);
   const [cinema, setCinema] = useState(false);
@@ -181,7 +181,7 @@ export function Battle({
       stopBgm(1.0);
       setGone(true);
       setPhase('over');
-      setMsg(`${net.opponentName}さんが バトルを ぬけました`);
+      setMsg(`${net.opponentName} が バトルを ぬけました`);
     });
     return off; // やりとりを閉じるのは App（開発中の二度呼びで閉じてしまわないように）
   }, [net, st]);
@@ -242,7 +242,7 @@ export function Battle({
         await s.attack(a, res.hits.length, onHit);
         break;
       case 'guard':
-        setMsg(`${A.spec.name} は ガードしている`);
+        setMsg(res.heal?.amount ? `${A.spec.name} は ガードして 体勢を立て直した` : `${A.spec.name} は ガードしている`);
         popup(a, 'GUARD', 'info');
         await s.guard(a);
         break;
@@ -314,7 +314,7 @@ export function Battle({
 
     let remote: [number, number] | null = null;
     while (!st.over && alive.current) {
-      setRound(Math.ceil(st.turn / 2));
+      setRound(roundOf(st));
       const pre = startTurn(st);
       s.setGuard(pre.side, false);
       patch(pre.side, snap(st, pre.side));
@@ -331,7 +331,7 @@ export function Battle({
       } else if (net) {
         // あいての番：あいてのスマホから、選んだ技が届くのを待つ
         setPhase('busy');
-        setMsg(`${net.opponentName}さんが 考えています…`);
+        setMsg(`${net.opponentName} が 考えています…`);
         const m = await net.next(moveNo.current);
         if (m === 'gone' || !alive.current) return;
         action = m.action;
@@ -356,7 +356,21 @@ export function Battle({
       endTurn(st);
       syncAll();
     }
-    if (!alive.current || st.winner === null) return;
+    if (!alive.current) return;
+    if (st.draw) {
+      // 引き分け：二人とも立ったまま、DRAW
+      setMsg(`${MAX_ROUND}ラウンドで 決着が つかなかった`);
+      stopBgm(1.5);
+      setSplash('TIME UP');
+      sfx('draw');
+      await s.wait(1.4);
+      setSplash(null);
+      setMsg('引き分け！ どちらも よく戦った');
+      setResult('draw');
+      setPhase('over');
+      return;
+    }
+    if (st.winner === null) return;
     const loser = foe(st.winner);
     setMsg(`${chars[loser].spec.name} は たおれた`);
     stopBgm(1.5); // 勝ち・負けの音がよく聞こえるように、曲を小さくしていく
@@ -405,7 +419,10 @@ export function Battle({
       <div className="hud-top">
         <SidePanel c={chars[0]} h={hud[0]} side={0} />
         <div className="hud-center">
-          <div className="round">ROUND {round}</div>
+          <Term tip={GLOSSARY.round} mark={false} className={`round${round > MAX_ROUND - 5 ? ' near' : ''}`}>
+            ROUND {round}
+            {round > MAX_ROUND - 5 && <small> / {MAX_ROUND}</small>}
+          </Term>
           <button className="btn tiny" onClick={() => setSpeed(speed === 1 ? 2 : 1)}>
             ×{speed}
           </button>
@@ -466,7 +483,7 @@ export function Battle({
           </div>
         ) : result ? (
           <div className={`result ${result}`}>
-            <div className="result-title">{result === 'win' ? 'YOU WIN' : 'YOU LOSE'}</div>
+            <div className="result-title">{result === 'win' ? 'YOU WIN' : result === 'lose' ? 'YOU LOSE' : 'DRAW'}</div>
             <div className="actions row">
               <button className="btn primary" onClick={onRematch}>
                 {net ? '部屋にもどる' : 'もう一度'}
@@ -486,7 +503,7 @@ export function Battle({
             </button>
             <button className="cmd guard" data-sfx="select" disabled={!cmdOn} onClick={() => choose('guard')}>
               <span className="cmd-main">ガード</span>
-              <span className="cmd-sub">ダメージ6割カット・SP+15</span>
+              <span className="cmd-sub">{st.f[0].lastGuard ? 'ダメージ6割カット（続けると回復なし）' : 'ダメージ6割カット・HP回復'}</span>
             </button>
             <button className="cmd skill" data-sfx="select" disabled={!cmdOn || !skillReady} onClick={() => choose('skill')}>
               <span className="cmd-main">{player.skill.name}</span>

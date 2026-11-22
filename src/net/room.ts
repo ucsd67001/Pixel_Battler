@@ -4,14 +4,16 @@
 //   ・部屋に入った人は、8秒ごとに「いるよ」の時刻（seen）を書く。60秒書かれていない人は、いないことにする
 //   ・バトルの計算は、二台がそれぞれ自分で行う。二台で同じ「さいころの種」（seed）を使い、選んだ技だけを送り合うので、同じ結果になる
 //   ・どちらのスマホでも、自分のロボが左（side 0）に出る。計算の決まり（battle.ts）は左右を入れかえても同じ結果になる
-//   ・本番は Firestore の rooms/main。家族のしるしのある人だけが読み書きできる（firestore.rules）
+//   ・本番は Firestore の rooms/main（バトル）と rooms/main/players/{uid}（いる人。一人一枚）。
+//     Google でログインした人ならだれでも使える。ほかの人の分は書きかえられない（firestore.rules）
+//   ・知らない人とも会うので、出すのはロボの名前だけ（Google の名前は出さない）。写真（thumb）は部屋に送らない
 //   ・手元で試すときは、URL に ?localroom を付けると、同じブラウザの二つのタブで話す（開発中だけ）
 
 import type { ActionType } from '../game/battle';
 import type { Character } from '../game/types';
-import { currentUser, ensureFamily, firestore } from '../lib/firebase';
+import { currentUser, firestore } from '../lib/firebase';
 import {
-  collection, deleteField, doc, onSnapshot, query, runTransaction, setDoc, updateDoc, where, type Firestore,
+  collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, runTransaction, setDoc, updateDoc, where, type Firestore,
 } from 'firebase/firestore';
 
 export const STALE_MS = 60_000; // これより長く「いるよ」が無い人は、いないことにする
@@ -61,7 +63,15 @@ function normalize(raw: RawRoom, now = Date.now()): RoomState {
   return { players, battle: raw.battle ?? null };
 }
 
-function joinRoom(raw: RawRoom, me: string, name: string, char: Character): RawRoom | 'full' {
+// 部屋に送るロボ：写真（thumb）を外す（知らない人に、家族の写真を見せないため）
+export function publicChar(c: Character): Character {
+  const { thumb: _thumb, ...rest } = c;
+  return rest;
+}
+
+function joinRoom(raw: RawRoom, me: string, full: Character): RawRoom | 'full' {
+  const char = publicChar(full);
+  const name = char.spec.name; // 出す名前は、ロボの名前だけ
   const now = Date.now();
   const st = normalize(raw, now);
   if (st.players.filter((p) => p.uid !== me).length >= 2) return 'full';
@@ -74,9 +84,11 @@ function joinRoom(raw: RawRoom, me: string, name: string, char: Character): RawR
   return { players, battle: prev ? raw.battle ?? null : null };
 }
 
-function startIn(raw: RawRoom, me: string): RawRoom | null {
+function startIn(raw: RawRoom, me: string): RawRoom | null | 'already' {
   const st = normalize(raw);
   if (st.players.length < 2 || !st.players.some((p) => p.uid === me)) return null;
+  // ついさっき、もう一人が始めたバトルがあれば、それに乗る
+  if (raw.battle && raw.battle.p.includes(me) && Date.now() - raw.battle.at < 10_000) return 'already';
   const [a, b] = st.players;
   const seed = Math.floor(Math.random() * 2 ** 32);
   // 先に動く人：「先手」の特性を持つほう。どちらも同じなら、さいころで決める
@@ -98,7 +110,6 @@ function startIn(raw: RawRoom, me: string): RawRoom | null {
 // ── つなぎ方（本番＝Firestore／手元の試し＝二つのタブ） ──
 export interface RoomLink {
   me: string;
-  name: string;
   watch(cb: (raw: RawRoom) => void): () => void;
   join(char: Character): Promise<'ok' | 'full'>;
   beat(): Promise<void>;
@@ -109,38 +120,81 @@ export interface RoomLink {
 }
 
 class FirestoreLink implements RoomLink {
-  private ref;
-  constructor(private db: Firestore, public me: string, public name: string) {
-    this.ref = doc(db, 'rooms', 'main');
+  private main;
+  private players;
+  constructor(private db: Firestore, public me: string) {
+    this.main = doc(db, 'rooms', 'main');
+    this.players = collection(db, 'rooms', 'main', 'players');
   }
+  // 部屋の紙（バトル）と、一人ずつの紙（いる人）を、一つの形にまとめて知らせる
   watch(cb: (raw: RawRoom) => void) {
-    return onSnapshot(
-      this.ref,
-      (s) => cb((s.data() as RawRoom | undefined) ?? {}),
-      (e) => console.warn('[room]', e),
+    let battle: RoomBattle | null = null;
+    let players: NonNullable<RawRoom['players']> = {};
+    const emit = () => cb({ players, battle });
+    const warn = (e: unknown) => console.warn('[room]', e);
+    const off1 = onSnapshot(
+      this.main,
+      (s) => {
+        battle = (s.data()?.battle as RoomBattle | undefined) ?? null;
+        emit();
+      },
+      warn,
     );
+    const off2 = onSnapshot(
+      this.players,
+      (s) => {
+        players = {};
+        s.forEach((d) => {
+          players[d.id] = d.data() as Omit<RoomPlayer, 'uid'>;
+        });
+        emit();
+      },
+      warn,
+    );
+    return () => {
+      off1();
+      off2();
+    };
   }
-  join(char: Character) {
-    return runTransaction(this.db, async (tx) => {
-      const raw = ((await tx.get(this.ref)).data() as RawRoom | undefined) ?? {};
-      const next = joinRoom(raw, this.me, this.name, char);
-      if (next === 'full') return 'full' as const;
-      tx.set(this.ref, next);
-      return 'ok' as const;
+  private async readRaw(): Promise<RawRoom> {
+    const [m, ps] = await Promise.all([getDoc(this.main), getDocs(this.players)]);
+    const players: NonNullable<RawRoom['players']> = {};
+    ps.forEach((d) => {
+      players[d.id] = d.data() as Omit<RoomPlayer, 'uid'>;
     });
+    return { players, battle: (m.data()?.battle as RoomBattle | undefined) ?? null };
+  }
+  async join(char: Character) {
+    const raw = await this.readRaw();
+    const next = joinRoom(raw, this.me, char);
+    if (next === 'full') return 'full' as const;
+    // 長くいなかった人の紙を片づける（決まりで、3分より新しいものは消せないので、少し長めに見る）
+    const now = Date.now();
+    await Promise.all(
+      Object.entries(raw.players ?? {})
+        .filter(([uid, p]) => uid !== this.me && now - (p.seen ?? 0) > 200_000)
+        .map(([uid]) => deleteDoc(doc(this.players, uid)).catch(() => {})),
+    );
+    await setDoc(doc(this.players, this.me), next.players![this.me]);
+    // 新しく入ってきたときは、前のバトルを片づける
+    if (raw.battle && !next.battle) await setDoc(this.main, { battle: null }).catch(() => {});
+    return 'ok' as const;
   }
   async beat() {
-    await updateDoc(this.ref, { [`players.${this.me}.seen`]: Date.now() });
+    await updateDoc(doc(this.players, this.me), { seen: Date.now() });
   }
   async leave() {
-    await updateDoc(this.ref, { [`players.${this.me}`]: deleteField() });
+    await deleteDoc(doc(this.players, this.me));
   }
-  start() {
+  async start() {
+    const raw = await this.readRaw();
+    // 二人が同時に「バトル開始！」をおしても、バトルが二つにならないように、部屋の紙は取り合いで書く
     return runTransaction(this.db, async (tx) => {
-      const raw = ((await tx.get(this.ref)).data() as RawRoom | undefined) ?? {};
-      const next = startIn(raw, this.me);
+      const cur = ((await tx.get(this.main)).data()?.battle as RoomBattle | undefined) ?? null;
+      const next = startIn({ ...raw, battle: cur }, this.me);
+      if (next === 'already') return true;
       if (!next) return false;
-      tx.set(this.ref, next);
+      tx.set(this.main, { battle: next.battle });
       return true;
     });
   }
@@ -162,12 +216,10 @@ class LocalLink implements RoomLink {
   private ch = new BroadcastChannel('pb-localroom');
   private subs = new Set<() => void>();
   me: string;
-  name: string;
   constructor() {
     let id = sessionStorage.getItem('pb.localme');
     if (!id) sessionStorage.setItem('pb.localme', (id = Math.random().toString(36).slice(2, 10)));
     this.me = id;
-    this.name = `テスト${id.slice(0, 2)}`;
     this.ch.onmessage = () => this.subs.forEach((f) => f());
   }
   private read<T>(k: string, d: T): T {
@@ -191,7 +243,7 @@ class LocalLink implements RoomLink {
     return this.listen(() => cb(this.read<RawRoom>('pb.localroom', {})));
   }
   async join(char: Character) {
-    const next = joinRoom(this.read<RawRoom>('pb.localroom', {}), this.me, this.name, char);
+    const next = joinRoom(this.read<RawRoom>('pb.localroom', {}), this.me, char);
     if (next === 'full') return 'full' as const;
     this.write('pb.localroom', next);
     return 'ok' as const;
@@ -211,7 +263,7 @@ class LocalLink implements RoomLink {
   }
   async start() {
     const next = startIn(this.read<RawRoom>('pb.localroom', {}), this.me);
-    if (next) this.write('pb.localroom', next);
+    if (next && next !== 'already') this.write('pb.localroom', next);
     return !!next;
   }
   async send(m: Move) {
@@ -233,15 +285,14 @@ class LocalLink implements RoomLink {
 
 export const isLocalRoom = () => import.meta.env.DEV && new URLSearchParams(location.search).has('localroom');
 
-/** 部屋へのつなぎを用意する。ログインと家族のしるしが要る */
-export async function openRoomLink(): Promise<RoomLink | 'login' | 'denied' | 'error'> {
+/** 部屋へのつなぎを用意する。Google でのログインが要る */
+export async function openRoomLink(): Promise<RoomLink | 'login' | 'error'> {
   if (isLocalRoom()) return new LocalLink();
-  const fam = await ensureFamily();
-  if (fam !== 'ok') return fam;
   const db = firestore();
   const u = currentUser();
-  if (!db || !u) return 'error';
-  return new FirestoreLink(db, u.uid, (u.displayName ?? '').trim() || 'プレイヤー');
+  if (!u) return 'login';
+  if (!db) return 'error';
+  return new FirestoreLink(db, u.uid);
 }
 
 /** 部屋に入っているあいだの世話係：だれがいるかを見張り、「いるよ」を書きつづける */
@@ -249,6 +300,7 @@ export class RoomSession {
   state: RoomState = { players: [], battle: null };
   joined = false;
   played = new Set<string>(); // もう遊んだバトル（同じバトルに二度飛びこまない）
+  myChar: Character | null = null; // 自分のロボ（写真つき。写真は自分の画面にだけ出す）
   private raw: RawRoom = {};
   private subs = new Set<(s: RoomState) => void>();
   private unwatch: () => void;
@@ -285,6 +337,7 @@ export class RoomSession {
     if (this.state.battle) this.played.add(this.state.battle.id);
     const r = await this.link.join(char);
     if (r === 'ok') {
+      this.myChar = char;
       this.joined = true;
       window.clearInterval(this.beatTimer);
       this.beatTimer = window.setInterval(() => this.link.beat().catch(() => {}), BEAT_MS);
@@ -362,7 +415,7 @@ export function makeNetBattle(session: RoomSession, b: RoomBattle): NetBattle {
   });
   return {
     opponent: b.chars[opp],
-    me: b.chars[me],
+    me: { ...b.chars[me], thumb: session.myChar?.thumb }, // 自分の写真は、自分の画面でだけ使う
     opponentName: b.names[opp] ?? 'あいて',
     seed: b.seed,
     iFirst: b.first === me,

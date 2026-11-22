@@ -4,6 +4,7 @@
 
 import type { Element, Trait } from './types';
 import { ELEMENT_INFO, TRAIT_TABLE, matchup } from './data';
+import { GUARD_HEAL, MAX_ROUND } from './battle';
 
 export interface Tip {
   title: string;
@@ -43,11 +44,15 @@ export const GLOSSARY = {
   },
   guard: {
     title: 'ガード',
-    body: '次の自分の番まで、受けるダメージが6割へる。SP も +15 たまる。',
+    body: `次の自分の番まで、受けるダメージが6割へる。HP も最大の${Math.round(GUARD_HEAL * 100)}%回復し、SP も +15 たまる。ただし、続けてガードしたときは回復しない。`,
   },
   counter: {
     title: 'カウンターの構え',
     body: '次にこうげきされたら、ダメージを半分にして、1.5倍のパワーでやり返す。',
+  },
+  round: {
+    title: 'ラウンド',
+    body: `自分と相手が一回ずつ動くと、一ラウンド。${MAX_ROUND}ラウンドまでに決着がつかなければ、引き分け。`,
   },
   buff: {
     title: 'アップ・ダウン',

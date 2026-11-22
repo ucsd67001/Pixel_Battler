@@ -110,7 +110,7 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
         {needLogin ? (
           <div className="dropzone login-panel">
             <div className="dz-main">Google でログイン</div>
-            <div className="dz-sub">写真から作れるのは、家族のアカウントだけです。</div>
+            <div className="dz-sub">写真から作るには、Google でログインしてください（一人一日10回まで）。</div>
             <button
               className="btn primary big"
               onClick={() => {

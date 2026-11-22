@@ -1573,3 +1573,17 @@ button {
   filter: grayscale(0.8);
   cursor: not-allowed;
 }
+
+/* 引き分け・ラウンドの残り */
+.result.draw .result-title {
+  color: #cfe6ff;
+  text-shadow: 0 0 18px rgba(120, 200, 255, 0.55);
+}
+.round small {
+  font-size: 11px;
+  opacity: 0.85;
+}
+.round.near {
+  color: #ffd23a;
+  text-shadow: 0 0 10px rgba(255, 210, 58, 0.6);
+}

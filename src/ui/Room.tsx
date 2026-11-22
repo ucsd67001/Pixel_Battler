@@ -1,5 +1,6 @@
-// ふたりで対戦の部屋。自分のロボを選んで入り、家族が入ってきたら「バトル開始！」。
-// 部屋はいまは一つだけ。入れるのは二人まで。
+// ふたりで対戦の部屋。自分のロボを選んで入り、あいてが入ってきたら「バトル開始！」。
+// 部屋はいまは一つだけ。入れるのは二人まで。Google でログインした人ならだれでも入れる。
+// 知らない人とも会うので、出すのはロボの名前だけ。写真は自分のものだけ、自分の画面に出す。
 
 import { useEffect, useState, type CSSProperties } from 'react';
 import type { Character } from '../game/types';
@@ -8,16 +9,16 @@ import { ELEMENT_INFO } from '../game/data';
 import { login, useUser } from '../lib/firebase';
 import { isLocalRoom, makeNetBattle, openRoomLink, RoomSession, type NetBattle, type RoomPlayer, type RoomState } from '../net/room';
 
-type Status = 'loading' | 'login' | 'denied' | 'error' | 'ready';
+type Status = 'loading' | 'login' | 'error' | 'ready';
 
-function Slot({ p, label, me }: { p?: RoomPlayer; label: string; me?: boolean }) {
+function Slot({ p, label, me, thumb }: { p?: RoomPlayer; label: string; me?: boolean; thumb?: string }) {
   if (!p)
     return (
       <div className="room-slot empty">
         <div className="room-slot-label">{label}</div>
         <div className="room-wait">
           <span className="room-dots">●●●</span>
-          <span>家族が 入ってくるのを 待っています</span>
+          <span>あいてが 入ってくるのを 待っています</span>
         </div>
       </div>
     );
@@ -26,9 +27,8 @@ function Slot({ p, label, me }: { p?: RoomPlayer; label: string; me?: boolean })
     <div className={`room-slot${me ? ' me' : ''}`} style={{ '--el': el.color } as CSSProperties}>
       <div className="room-slot-label">{label}</div>
       <div className="room-slot-body">
-        {p.char.thumb ? <img src={p.char.thumb} alt="" /> : <span className="noimg" />}
+        {thumb ? <img src={thumb} alt="" /> : <span className="noimg" style={{ background: el.color }} />}
         <div>
-          <div className="room-player">{p.name}さん</div>
           <div className="room-robot">
             <b>{p.char.spec.name}</b> <span className={`rank mini rank-${p.char.rank}`}>{p.char.rank}</span>
           </div>
@@ -59,7 +59,7 @@ export function Room({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
-  // 部屋につなぐ（ログインと、家族のしるしを確かめてから）
+  // 部屋につなぐ（Google でログインしてから）
   useEffect(() => {
     if (session) return;
     if (user === undefined && !isLocalRoom()) return;
@@ -139,7 +139,6 @@ export function Room({
             </button>
           </div>
         )}
-        {status === 'denied' && <div className="empty">このアカウントでは使えません（家族のアカウントだけが使えます）。</div>}
         {status === 'error' && <div className="empty">部屋に つなげませんでした。少しあとで、もう一度ひらいてください。</div>}
 
         {status === 'ready' && (
@@ -147,7 +146,7 @@ export function Room({
             <div className="room-slots">
               {joined ? (
                 <>
-                  <Slot p={me} label="あなた" me />
+                  <Slot p={me} label="あなた" me thumb={session?.myChar?.thumb} />
                   <div className="room-vs">VS</div>
                   <Slot p={others[0]} label="あいて" />
                 </>
@@ -164,9 +163,9 @@ export function Room({
                 : joined
                   ? others.length
                     ? 'ふたりそろいました！ どちらかが「バトル開始！」をおすと始まります。'
-                    : '家族が 入ってくると、ここに出てきます。'
+                    : 'あいてが 入ってくると、ここに出てきます。'
                   : others.length
-                    ? `${others[0].name}さんが 待っています。ロボを選んで 入ろう！`
+                    ? `${others[0].name} が 待っています。ロボを選んで 入ろう！`
                     : 'まだ だれも いません。ロボを選んで 入って待とう。'}
             </div>
 

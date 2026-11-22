@@ -17,7 +17,8 @@ cd C:\Users\ucsd6\dev\snapgear; npm run dev
 - **モデル**：既定は `gpt-6-luna`。画像を読めなかったら `gpt-4.1-mini` に切り替える。`.env` に `GAME_MODEL=...` で替えられる
 - **同じ写真なら同じロボ**：AIの答えは `.cache/specs/` に写真の印（ハッシュ）ごとに残す。数値は印から機械で決める
 - 同じ Wi-Fi のスマホから試すとき：`npm run dev -- --host` で起動し、表示される Network の URL を開く
-- 手元では、ログインなしで写真から作れる（ログインと家族の許可は Firebase の上だけ）
+- 手元では、ログインなしで写真から作れる（ログインと回数の上限は Firebase の上だけ）
+- 手元で「ふたりで対戦」を試すとき：URL に `?localroom` を付けて、同じブラウザの二つのタブで開く（開発中だけ）
 
 ## Firebase に載せる（Hosting ＋ Cloud Functions）
 
@@ -25,9 +26,10 @@ cd C:\Users\ucsd6\dev\snapgear; npm run dev
 
 - プロジェクト：`pixel-battler-gemu`（表示名 Pixel Battler。`pixel-battler` は使われていた）。料金プランは Blaze（従量課金）
 - **画面**は Hosting、**写真を読む窓口**は Cloud Functions の `api`（東京 asia-northeast1）。同じドメインの `/api/**` が `api` に届く（`firebase.json` の rewrites）
-- **鍵**は Secret Manager：`OPENAI_API_KEY`（OpenAI の鍵）と `ALLOWED_EMAILS`（写真から作ってよい家族の Gmail。カンマ区切り）。**どちらもリポジトリに書かない**
-- **ログイン**：写真から作るときだけ Google でログイン。`ALLOWED_EMAILS` にあるアドレスの人だけが作れる。バトルと格納庫はログインなしで遊べる
-- **歯止め**：一人一日30回まで（`functions/src/index.ts` の `DAILY_LIMIT`）。同じ写真の2回目からは、取っておいた設計図を返すので数えない
+- **鍵**は Secret Manager：`OPENAI_API_KEY`（OpenAI の鍵）と `ALLOWED_EMAILS`（家族の Gmail。カンマ区切り。家族は作れる回数が多い）。**どちらもリポジトリに書かない**
+- **ログイン**：写真から作るときと、ふたりで対戦のときに Google でログイン。**Google のアカウントならだれでも使える**（2026-11-22 から。それまでは家族だけ）。コンピュータとのバトルと格納庫は、ログインなしで遊べる
+- **歯止め**（`functions/src/index.ts`）：家族は一人一日30回、家族以外は一人一日10回、家族以外の全員を合わせて一日200回。同じ写真の2回目からは、取っておいた設計図を返すので数えない。OpenAI の側にも、使える金額の上限を置いてある
+- **ふたりで対戦**：Firestore の `rooms/main`（バトル）と `rooms/main/players/{uid}`（部屋にいる人。一人一枚）と `rooms/main/moves`（選んだ技）。ログインした人ならだれでも使えるが、ほかの人の分は書きかえられない（`firestore.rules`）。知らない人とも会うので、出すのはロボの名前だけ。写真は部屋に送らない
 - **同じ写真なら同じロボ**：Firebase の上では、設計図を Firestore の `specs/` に取っておく（画面から Firestore は読めない＝`firestore.rules`）
 - 画面用の Firebase の接続設定は `.env` の `VITE_FIREBASE_*`（`.env.example` に名前）
 
@@ -37,7 +39,7 @@ cd C:\Users\ucsd6\dev\snapgear; npm run deploy
 
 （画面を作る → 窓口を一つのファイルにまとめる（`functions/lib/`）→ `firebase deploy`）
 
-家族を足すとき（今のアドレスも含めて、全部をカンマ区切りで入れ直す。入れたら `npm run deploy`）：
+家族を足すとき（今のアドレスも含めて、全部をカンマ区切りで入れ直す。入れたら `npm run deploy`。⚠️ 出し直さないと効かない）：
 
 ```powershell
 cd C:\Users\ucsd6\dev\snapgear; firebase functions:secrets:set ALLOWED_EMAILS --project pixel-battler-gemu

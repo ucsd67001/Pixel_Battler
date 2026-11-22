@@ -41,8 +41,14 @@ export async function analyze(image: string, hash: string): Promise<{ spec: Char
     });
     const data = await r.json().catch(() => ({}));
     if (r.status === 401) throw new AccessError(401, 'Google でログインしてください。');
-    if (r.status === 403) throw new AccessError(403, 'このアカウントでは、写真から作れません（家族のアカウントだけが使えます）。');
-    if (r.status === 429) throw new AccessError(429, '今日の分の回数を使い切りました。また明日どうぞ。');
+    if (r.status === 403) throw new AccessError(403, 'このアカウントでは、写真から作れません（メールアドレスの確認が済んだ Google アカウントが要ります）。');
+    if (r.status === 429)
+      throw new AccessError(
+        429,
+        data?.error === 'everyone limit'
+          ? '今日は、みんなの分の回数がいっぱいになりました。また明日どうぞ。'
+          : `今日の分（一日${data?.limit ?? ''}回）を使い切りました。また明日どうぞ。`,
+      );
     if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
     return { spec: sanitizeSpec(data.spec), model: data.model };
   } finally {

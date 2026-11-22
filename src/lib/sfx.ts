@@ -14,12 +14,12 @@ export type SfxName =
   | 'swing' | 'hit' | 'crit' | 'guard' | 'shot' | 'orb'
   | 'skill' | 'heal' | 'buff' | 'debuff' | 'counter' | 'cutin' | 'gauge'
   | 'charge' | 'beam' | 'slash' | 'boom' | 'ko' | 'win' | 'lose'
-  | 'ultboom' | 'whoosh';
+  | 'ultboom' | 'whoosh' | 'draw';
 
 export const SFX_NAMES: SfxName[] = [
   'click', 'select', 'scan', 'reveal', 'ready', 'fight', 'land', 'swing', 'hit', 'crit', 'guard', 'shot', 'orb',
   'skill', 'heal', 'buff', 'debuff', 'counter', 'cutin', 'gauge', 'charge', 'beam', 'slash', 'boom', 'ko', 'win',
-  'lose', 'ultboom', 'whoosh',
+  'lose', 'ultboom', 'whoosh', 'draw',
 ];
 
 const MUTE_KEY = 'pixelbattler.muted';
@@ -594,6 +594,13 @@ const SOUNDS: Record<SfxName, (b: Bus) => void> = {
     pad(b, { freqs: [C * 2, C * 2.5, C * 3, C * 4.5, C * 4], dur: 2.2, vol: 0.28, attack: 0.04, cut: 5000, cutTo: 800, at: 0.36, rev: 0.7 });
     tone(b, { f: C, dur: 2.0, vol: 0.25, at: 0.36, attack: 0.03 });
     sparkle(b, { base: C * 8, count: 12, spread: 1.2, vol: 0.05, at: 0.4 });
+  },
+  // 引き分け（時間切れ）：ドン＋どちらでもない和音（ド・ファ・ソ）が、ふわっと鳴って消える
+  draw: (b) => {
+    kick(b, { f: 130, to: 40, dur: 0.6, vol: 0.55 });
+    pad(b, { freqs: [C * 2, C * 2 * 1.335, C * 3, C * 4], dur: 2.0, vol: 0.24, attack: 0.04, cut: 3000, cutTo: 500, rev: 0.7 });
+    tone(b, { f: C, dur: 1.8, vol: 0.2, attack: 0.03 });
+    air(b, { dur: 1.2, vol: 0.05, rev: 0.6 });
   },
   // 負け：しずかに下がる、こもった和音
   lose: (b) => {

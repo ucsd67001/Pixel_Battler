@@ -1,19 +1,23 @@
-// Firebase の Cloud Functions：写真をAIに読ませる窓口（/api/health と /api/analyze）と、
-// 家族のしるしを付ける窓口（/api/family。しるしのある人だけが、ふたりで対戦の部屋を読み書きできる＝firestore.rules）。
+// Firebase の Cloud Functions：写真をAIに読ませる窓口（/api/health と /api/analyze）。
 // Hosting の書き換え（firebase.json）で、同じドメインの /api/** がここに来る。
-// ⚠️ 鍵（OPENAI_API_KEY）と、許可する家族のアドレス（ALLOWED_EMAILS）は Secret Manager に置く。リポジトリには書かない。
+// 写真から作れるのは、Google でログインした人だれでも（2026-11-22 から。それまでは家族だけ）。
+// 回数の上限：家族（ALLOWED_EMAILS）は一人一日30回、家族以外は一人一日10回、家族以外の全員を合わせて一日200回。
+// ⚠️ 鍵（OPENAI_API_KEY）と、家族のアドレス（ALLOWED_EMAILS）は Secret Manager に置く。リポジトリには書かない。
 
 import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { initializeApp } from 'firebase-admin/app';
-import { getAuth, type DecodedIdToken } from 'firebase-admin/auth';
+import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { analyzeImage, cacheKey, type SpecCache } from '../../server/analyze';
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 const ALLOWED_EMAILS = defineSecret('ALLOWED_EMAILS'); // カンマ区切り
 const MODEL = process.env.GAME_MODEL || 'gpt-6-luna';
-const DAILY_LIMIT = 30; // 一人が一日に写真から作れる回数（料金の歯止め）
+// 写真から作れる回数（料金の歯止め。日本時間の一日ごと）
+const FAMILY_DAILY = 30; // 家族は一人一日
+const GUEST_DAILY = 10; // 家族以外は一人一日
+const GUEST_TOTAL_DAILY = 200; // 家族以外の全員を合わせて一日
 
 initializeApp();
 const db = getFirestore();
@@ -28,7 +32,7 @@ const cache: SpecCache = {
   },
 };
 
-function allowed(email: string | undefined) {
+function isFamily(email: string | undefined) {
   if (!email) return false;
   const list = ALLOWED_EMAILS.value()
     .split(/[,\s]+/)
@@ -37,15 +41,19 @@ function allowed(email: string | undefined) {
   return list.includes(email.toLowerCase());
 }
 
-// 一日の回数を数える（日本時間の日付ごと）。上限を超えたら false
-async function countUp(uid: string) {
+// 一日の回数を数える（日本時間の日付ごと）。ok／mine＝その人の分を使い切った／all＝家族以外の全員の分を使い切った
+async function countUp(uid: string, family: boolean): Promise<'ok' | 'mine' | 'all'> {
   const day = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
   const ref = db.collection('usage').doc(`${uid}_${day}`);
+  const allRef = db.collection('usage').doc(`_guests_${day}`);
   return db.runTransaction(async (tx) => {
     const n = ((await tx.get(ref)).data()?.count as number | undefined) ?? 0;
-    if (n >= DAILY_LIMIT) return false;
+    const all = family ? 0 : (((await tx.get(allRef)).data()?.count as number | undefined) ?? 0);
+    if (n >= (family ? FAMILY_DAILY : GUEST_DAILY)) return 'mine';
+    if (!family && all >= GUEST_TOTAL_DAILY) return 'all';
     tx.set(ref, { count: n + 1, day }, { merge: true });
-    return true;
+    if (!family) tx.set(allRef, { count: all + 1, day }, { merge: true });
+    return 'ok';
   });
 }
 
@@ -77,15 +85,6 @@ export const api = onRequest(
       res.json({ ai: true, model: MODEL, auth: true });
       return;
     }
-    // 家族のしるし（family）を付ける。家族の一覧から外れた人からは外す
-    if (req.path.endsWith('/family')) {
-      const user: DecodedIdToken | null = await verify(req, res);
-      if (!user) return;
-      const fam = !!user.email_verified && allowed(user.email);
-      if (fam !== (user.family === true)) await getAuth().setCustomUserClaims(user.uid, fam ? { family: true } : {});
-      res.status(fam ? 200 : 403).json({ family: fam });
-      return;
-    }
     if (!req.path.endsWith('/analyze')) {
       res.status(404).json({ error: 'not found' });
       return;
@@ -95,13 +94,14 @@ export const api = onRequest(
       return;
     }
 
-    // ログインと、家族の許可を確かめる
+    // ログインを確かめる（メールアドレスの確認が済んだ Google アカウントなら、だれでも）
     const user = await verify(req, res);
     if (!user) return;
-    if (!user.email_verified || !allowed(user.email)) {
+    if (!user.email_verified) {
       res.status(403).json({ error: 'not allowed' });
       return;
     }
+    const family = isFamily(user.email);
 
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
@@ -109,8 +109,9 @@ export const api = onRequest(
       const hash = String(body?.hash ?? '');
       // 取っておいたものがあれば、回数に数えずに返す
       const hit = /^[a-f0-9]{64}$/.test(hash) ? await cache.get(cacheKey(hash)).catch(() => null) : null;
-      if (!hit && !(await countUp(user.uid))) {
-        res.status(429).json({ error: 'daily limit' });
+      const count = hit ? 'ok' : await countUp(user.uid, family);
+      if (count !== 'ok') {
+        res.status(429).json({ error: count === 'all' ? 'everyone limit' : 'daily limit', limit: family ? FAMILY_DAILY : GUEST_DAILY });
         return;
       }
       const result = await analyzeImage(image, hash, { apiKey: OPENAI_API_KEY.value(), model: MODEL, cache });

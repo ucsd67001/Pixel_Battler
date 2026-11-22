@@ -7,7 +7,7 @@ import { Showcase } from './StageView';
 import { useUser } from '../lib/firebase';
 import { isLocalRoom, openRoomLink, RoomSession, type RoomState } from '../net/room';
 
-// タイトルで、ふたりで対戦の部屋にだれがいるかを見る（ログインしている家族だけ）
+// タイトルで、ふたりで対戦の部屋にだれがいるかを見る（ログインしている人だけ）
 function useRoomPeek(): RoomState | null {
   const user = useUser();
   const [state, setState] = useState<RoomState | null>(null);
@@ -31,7 +31,7 @@ function useRoomPeek(): RoomState | null {
 function roomLabel(s: RoomState | null) {
   if (!s) return '';
   if (s.players.length === 0) return 'いま だれも いません';
-  if (s.players.length === 1) return `${s.players[0].name}さんが 待っています！`;
+  if (s.players.length === 1) return `${s.players[0].name} が 待っています！`;
   return 'いま 対戦中';
 }
 

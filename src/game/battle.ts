@@ -27,6 +27,7 @@ export interface Fighter {
   gutsUsed: boolean;
   counter: boolean;
   firstUsed: boolean;
+  lastGuard: boolean; // 前の自分の番もガードだったか（続けてガードしたときは回復しない）
 }
 
 export interface BattleState {
@@ -35,6 +36,7 @@ export interface BattleState {
   active: Side;
   over: boolean;
   winner: Side | null;
+  draw?: boolean; // MAX_ROUND までに決着がつかなかった
 }
 
 export interface Hit {
@@ -65,6 +67,12 @@ export interface PreTurn {
 }
 
 export const MAX_GAUGE = 100;
+/** ガードで回復する量（最大HPの割合）。バーコードバトラーの「防御で回復」にならった（2026-11-22） */
+export const GUARD_HEAL = 0.08;
+/** このラウンドまでに決着がつかなければ、引き分け（2026-11-22。いちばん長い戦い方でも22ラウンドで終わる） */
+export const MAX_ROUND = 25;
+/** いまのラウンド（自分と相手が一回ずつ動くと、一つ進む） */
+export const roundOf = (st: BattleState) => Math.ceil(st.turn / 2);
 export const foe = (s: Side): Side => (s === 0 ? 1 : 0);
 
 function makeFighter(c: Character): Fighter {
@@ -79,6 +87,7 @@ function makeFighter(c: Character): Fighter {
     gutsUsed: false,
     counter: false,
     firstUsed: false,
+    lastGuard: false,
   };
 }
 
@@ -142,6 +151,11 @@ export function endTurn(st: BattleState): string[] {
   me.buffs = me.buffs.filter((b) => b.turns > 0);
   st.active = foe(st.active);
   st.turn++;
+  if (roundOf(st) > MAX_ROUND) {
+    st.over = true;
+    st.winner = null;
+    st.draw = true;
+  }
   return expired;
 }
 
@@ -210,6 +224,8 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
       A.guarding = true;
       A.sp = Math.min(A.c.stats.sp, A.sp + 15);
       addGauge(A, 10);
+      // 守りながら、体勢を立て直して回復する。続けてガードしたときは回復しない（ガードだけをくり返して、終わらなくならないように）
+      if (!A.lastGuard) heal(A.c.stats.hp * GUARD_HEAL);
       break;
     case 'skill': {
       const sk = A.c.skill;
@@ -275,6 +291,7 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
     res.counterHit = dealDamage(st, d, 1.5, rng, { ignoreGuard: true, isCounter: true });
   }
   if (res.hits.length > 0) A.firstUsed = true;
+  A.lastGuard = type === 'guard';
 
   if (D.hp <= 0) {
     res.ko = d;

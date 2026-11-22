@@ -30,33 +30,6 @@ export function currentUser() {
   return auth?.currentUser ?? null;
 }
 
-// 家族のしるし（family）を確かめる。無ければサーバーに付けてもらい、しるし入りの鍵を取り直す。
-// ok＝部屋を使える／login＝ログインが要る／denied＝家族の一覧に無い／error＝つながらない
-let famCache: { uid: string; p: Promise<'ok' | 'login' | 'denied' | 'error'> } | null = null;
-export function ensureFamily(): Promise<'ok' | 'login' | 'denied' | 'error'> {
-  const u = auth?.currentUser;
-  if (!u) return Promise.resolve('login');
-  if (famCache?.uid === u.uid) return famCache.p;
-  const p = (async () => {
-    try {
-      const t = await u.getIdTokenResult();
-      if (t.claims.family === true) return 'ok' as const;
-      const r = await fetch('/api/family', { method: 'POST', headers: { Authorization: `Bearer ${t.token}` } });
-      if (r.status === 403) return 'denied' as const;
-      if (!r.ok) return 'error' as const;
-      await u.getIdToken(true);
-      return 'ok' as const;
-    } catch {
-      return 'error' as const;
-    }
-  })();
-  famCache = { uid: u.uid, p };
-  p.then((r) => {
-    if (r === 'error' && famCache?.p === p) famCache = null; // つながらなかったときは、次にもう一度ためす
-  });
-  return p;
-}
-
 export async function login() {
   if (!auth) return;
   const provider = new GoogleAuthProvider();
@@ -71,6 +44,7 @@ export async function logout() {
 export async function idToken(): Promise<string | null> {
   return auth?.currentUser ? auth.currentUser.getIdToken() : null;
 }
+
 
 // ログインの状態。undefined＝まだ分からない、null＝ログインしていない
 export function useUser() {
