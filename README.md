@@ -21,6 +21,8 @@ cd C:\Users\ucsd6\dev\snapgear; npm run dev
 
 ## Firebase に載せる（Hosting ＋ Cloud Functions）
 
+**公開されている場所：https://pixel-battler-gemu.web.app**（2026-11-22 から）
+
 - プロジェクト：`pixel-battler-gemu`（表示名 Pixel Battler。`pixel-battler` は使われていた）。料金プランは Blaze（従量課金）
 - **画面**は Hosting、**写真を読む窓口**は Cloud Functions の `api`（東京 asia-northeast1）。同じドメインの `/api/**` が `api` に届く（`firebase.json` の rewrites）
 - **鍵**は Secret Manager：`OPENAI_API_KEY`（OpenAI の鍵）と `ALLOWED_EMAILS`（写真から作ってよい家族の Gmail。カンマ区切り）。**どちらもリポジトリに書かない**
