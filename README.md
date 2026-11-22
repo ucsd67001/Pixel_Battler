@@ -21,7 +21,7 @@ cd C:\Users\ucsd6\dev\snapgear; npm run dev
 
 ## Firebase に載せる（Hosting ＋ Cloud Functions）
 
-**公開されている場所：https://pixel-battler-gemu.web.app**（2026-11-22 から）
+**公開されている場所：https://pixelbattler.web.app**（2026-11-22 から。Hosting のサイト名 `pixelbattler`。`pixel-battler` はほかの人のプロジェクトが使っていた）。前の https://pixel-battler-gemu.web.app は、新しい場所へ転送するだけ（`hosting-redirect/`）。Google ログインの窓は `pixel-battler-gemu.firebaseapp.com` を通るので、前のサイトは消さない
 
 - プロジェクト：`pixel-battler-gemu`（表示名 Pixel Battler。`pixel-battler` は使われていた）。料金プランは Blaze（従量課金）
 - **画面**は Hosting、**写真を読む窓口**は Cloud Functions の `api`（東京 asia-northeast1）。同じドメインの `/api/**` が `api` に届く（`firebase.json` の rewrites）

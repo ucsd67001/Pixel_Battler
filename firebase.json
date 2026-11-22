@@ -1,18 +1,50 @@
 {
-  "hosting": {
-    "public": "dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [
-      { "source": "/api/**", "function": { "functionId": "api", "region": "asia-northeast1" } },
-      { "source": "**", "destination": "/index.html" }
-    ]
-  },
+  "hosting": [
+    {
+      "site": "pixelbattler",
+      "public": "dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "/api/**",
+          "function": {
+            "functionId": "api",
+            "region": "asia-northeast1"
+          }
+        },
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    },
+    {
+      "site": "pixel-battler-gemu",
+      "public": "hosting-redirect",
+      "redirects": [
+        {
+          "regex": "^/(.*)$",
+          "destination": "https://pixelbattler.web.app/:1",
+          "type": 301
+        }
+      ]
+    }
+  ],
   "functions": [
     {
       "source": "functions",
       "codebase": "default",
       "runtime": "nodejs22",
-      "ignore": ["node_modules", "src", ".git", "*.log"]
+      "ignore": [
+        "node_modules",
+        "src",
+        ".git",
+        "*.log"
+      ]
     }
   ],
   "firestore": {
