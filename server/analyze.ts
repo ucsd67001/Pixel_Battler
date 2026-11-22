@@ -1,0 +1,122 @@
+// 写真を OpenAI に読ませて、キャラの設計図（CharacterSpec）を作る。
+// ⚠️ 鍵はこのファイルの外から渡す。鍵をログやエラーに出さない。
+// 将来 Firebase の Cloud Functions に移すときは、analyzeImage をそのまま呼べばよい。
+
+import fs from 'node:fs';
+import path from 'node:path';
+import type { CharacterSpec } from '../src/game/types';
+import { sanitizeSpec, SPEC_JSON_SCHEMA } from '../src/game/spec';
+
+export interface AnalyzeOptions {
+  apiKey: string;
+  model: string;
+  cacheDir: string;
+}
+
+export interface AnalyzeResult {
+  spec: CharacterSpec;
+  cached: boolean;
+  model: string;
+}
+
+const SYSTEM_PROMPT = `あなたは、写真から「オリジナルのSDロボット戦士」を一体設計する、メカデザイナー兼ゲームデザイナーです。
+このゲームでは、写真を読み込むとロボが生まれ、ターン制で戦います。
+
+手順：
+1. 写真の中で「いちばん特徴的なもの」を一つ選び、motif に短く書く。物・動物・植物・料理・風景など何でもよい。人が写っているときは、顔や体つきではなく、服・持ち物・その場の雰囲気から選ぶ。
+2. そのモチーフの色・形・素材・性質・連想から、ロボの姿・属性・能力の傾向・技を決める。見た人が「あの写真のあれだ」と分かるようにする。
+
+決まり：
+- 既存のアニメ・ゲーム・特撮の機体名・キャラ名・技名は使わない。すべてオリジナルにする。
+- name：カタカナのロボの名前（3〜10字）。モチーフの言葉を英語やラテン語風にもじると良い。
+- title：「〜の〜」の形の二つ名（12字まで）。
+- description：モチーフとのつながりが分かる、かっこいい紹介文（60字まで）。
+- skill.name と ultimate.name：漢字とカタカナを組み合わせた技名（14字まで）。description はそれぞれ40字まで。ultimate.shout は技を放つときの短い叫び（20字まで）。
+- colors：モチーフの色をもとにした #RRGGBB。primary＝本体の装甲、secondary＝差し色の装甲、accent＝角や縁取りの金属、eye＝目の光（明るい色）。primary と secondary ははっきり違う色にする。
+- bias：hp・sp・atk・def の傾向を 1〜5 で。重くて硬いものは hp と def、鋭いものや速いものは atk、不思議なものや知的なものは sp を高めに。全部を高くしない（合計は 10〜14）。
+- 人を傷つける言葉・差別的な言葉・実在の人物の名前は使わない。
+
+選択肢の意味：
+- element：blaze＝炎・熱・赤・情熱 / tide＝水・氷・海・青・冷静 / verdant＝植物・自然・動物・緑 / light＝光・金・白・電気・神聖 / dark＝夜・影・黒・神秘・冷たい機械
+- parts.head：vfin＝V字の角（主人公らしい） / horns＝二本の角（猛々しい） / mono＝一つ目のバイザー（無機質） / crest＝とさかのフィン（騎士） / ears＝耳型センサー（動物・かわいい） / crown＝王冠（高貴）
+- parts.body：standard / slim（すばやい） / heavy（重装）
+- parts.arms：standard / heavy（大きな手甲） / blade（腕に刃）
+- parts.legs：standard / heavy（太い） / thruster（噴射口つき）
+- parts.back：none / wings（翼） / boosters（推進器） / cannons（肩のキャノン） / cape（マント）
+- parts.weapon：none（拳） / sword（剣） / lance（槍） / rifle（銃） / hammer（槌） / shield（盾と拳） / claw（爪）
+- skill.kind：strike（強烈な一撃） / barrage（三連撃） / drain（攻撃して吸収） / breaker（守りを砕く） / heal（回復） / powerup（攻撃強化） / fortify（防御強化） / hex（相手を弱らせる） / counter（反撃の構え）
+- ultimate.style：beam（極太のビーム） / slash（一閃） / meteor（流星を降らせる） / burst（大爆発） / rush（乱舞）
+- trait：first（先制） / guts（不屈：一度だけHP1で耐える） / pierce（貫通） / regen（再生） / focus（集中：SPの回復が2倍） / ironwall（堅牢：ピンチで防御アップ） / fighter（闘志：必殺ゲージが早くたまる） / lucky（強運：会心が出やすい）`;
+
+const USER_PROMPT = 'この写真から、ロボを一体設計してください。';
+
+const REASONING = /^(gpt-5|gpt-6|o1|o3|o4)/;
+
+async function callOpenAI(image: string, model: string, apiKey: string): Promise<unknown> {
+  const body: Record<string, unknown> = {
+    model,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: USER_PROMPT },
+          { type: 'image_url', image_url: { url: image, detail: 'low' } },
+        ],
+      },
+    ],
+    response_format: {
+      type: 'json_schema',
+      json_schema: { name: 'character_spec', strict: true, schema: SPEC_JSON_SCHEMA },
+    },
+  };
+  // 新しい世代のモデルは指定の名前が違う（GEMu の llm_params.py と同じ読み替え）
+  if (REASONING.test(model)) {
+    body.max_completion_tokens = 2000;
+    body.reasoning_effort = 'none';
+  } else {
+    body.max_tokens = 1500;
+    body.temperature = 0.9;
+  }
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = (await res.text()).slice(0, 300);
+    throw new Error(`OpenAI HTTP ${res.status}: ${detail}`);
+  }
+  const data: any = await res.json();
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) throw new Error('OpenAI returned empty content');
+  return JSON.parse(content);
+}
+
+export async function analyzeImage(image: string, hash: string, opt: AnalyzeOptions): Promise<AnalyzeResult> {
+  if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error('bad hash');
+  if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(image)) throw new Error('bad image');
+
+  // 同じ写真には、同じ設計図を返す
+  const file = path.join(opt.cacheDir, `${hash}.json`);
+  if (fs.existsSync(file)) {
+    const spec = sanitizeSpec(JSON.parse(fs.readFileSync(file, 'utf8')));
+    return { spec, cached: true, model: 'cache' };
+  }
+
+  const models = [opt.model];
+  if (opt.model !== 'gpt-4.1-mini') models.push('gpt-4.1-mini');
+  let lastError: unknown = null;
+  for (const model of models) {
+    try {
+      const spec = sanitizeSpec(await callOpenAI(image, model, opt.apiKey));
+      fs.mkdirSync(opt.cacheDir, { recursive: true });
+      fs.writeFileSync(file, JSON.stringify(spec, null, 2), 'utf8');
+      return { spec, cached: false, model };
+    } catch (e) {
+      lastError = e;
+      console.warn(`[analyze] ${model} failed: ${String((e as Error).message).slice(0, 300)}`);
+    }
+  }
+  throw lastError ?? new Error('analyze failed');
+}
