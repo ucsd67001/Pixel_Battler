@@ -6,6 +6,7 @@ import {
   type CharacterSpec, type Element,
 } from './types';
 import { ELEMENT_INFO } from './data';
+import { seedFrom } from './random';
 
 const str = { type: 'string' } as const;
 const en = (values: readonly string[]) => ({ type: 'string', enum: [...values] });
@@ -105,5 +106,12 @@ export function sanitizeSpec(raw: any): CharacterSpec {
     },
     trait: pick(r.trait, TRAITS, 'fighter'),
     bonus: r.bonus === 1 ? 1 : 0,
+    ...(Number.isInteger(r.look) && r.look >= 0 && r.look < 2 ** 32 ? { look: r.look as number } : {}),
   };
+}
+
+/** 見た目（体の比率）の乱数の種。同じ設計図なら、どのスマホでも同じ体つきになる */
+export function lookSeed(spec: CharacterSpec): number {
+  if (spec.look !== undefined) return spec.look;
+  return seedFrom(`body|${spec.name}|${spec.motif}|${spec.colors.primary}|${spec.colors.secondary}|${Object.values(spec.parts).join(',')}`);
 }

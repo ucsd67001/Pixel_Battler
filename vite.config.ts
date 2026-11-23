@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { analyzeImage, fixSpecText, type SpecCache } from './server/analyze';
 import { sanitizeSpec } from './src/game/spec';
+import { toRival } from './server/rival';
+import { createHash } from 'node:crypto';
 
 // 鍵を探す：① .env の OPENAI_API_KEY ② .env の KEY_ENV_FILE が指す別のファイルの OPENAI_API_KEY
 // ⚠️ 鍵は表示しない
@@ -91,10 +93,22 @@ function apiPlugin(env: Record<string, string>): Plugin {
     }
   };
 
+  // ほかの人のロボを敵に出すしくみを、手元で試すため：取り置きの設計図から一体を選んで返す
+  const rival: Connect.NextHandleFunction = (req, res) => {
+    if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
+    const files = fs.existsSync(cacheDir) ? fs.readdirSync(cacheDir).filter((f) => f.endsWith('.json')) : [];
+    if (!files.length) return send(res, 200, { robot: null });
+    const f = files[Math.floor(Math.random() * files.length)];
+    const spec = JSON.parse(fs.readFileSync(path.join(cacheDir, f), 'utf8'));
+    const seed = createHash('sha256').update(f).digest('hex');
+    send(res, 200, { robot: toRival({ seed, spec }) });
+  };
+
   const mount = (m: Connect.Server) => {
     m.use('/api/health', health);
     m.use('/api/analyze', analyze);
     m.use('/api/fix-text', fixText);
+    m.use('/api/rival', rival);
   };
 
   return {

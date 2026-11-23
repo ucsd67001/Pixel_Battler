@@ -56,6 +56,9 @@ export interface CharacterSpec {
   // 特別な写真から生まれたロボ（1）。総合力と技が少し強くなる。
   // どんな写真が特別かは、サーバーの鍵の置き場（HIDDEN_RULE）にだけ書く。リポジトリには書かない
   bonus?: 0 | 1;
+  // 見た目（体の比率）の乱数の種。ほかの人のロボを敵に出すときだけ使う。
+  // motif（写真に写っていたもの）を送らずに、持ち主の画面と同じ体つきにするため
+  look?: number;
 }
 
 export interface Stats {
@@ -84,7 +87,7 @@ export interface Character {
   skill: SkillDef;
   createdAt: number;
   thumb?: string;
-  source: 'ai' | 'local' | 'cpu';
+  source: 'ai' | 'local' | 'cpu' | 'rival'; // rival＝ほかの人のガレージから来た敵
   // 文の習わない漢字を、ガレージで書き直した日（一体につき一度だけ。漢字の決まりを入れる前に作ったロボのため）
   textFixedAt?: number;
 }

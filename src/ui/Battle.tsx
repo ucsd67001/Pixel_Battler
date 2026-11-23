@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Character } from '../game/types';
-import { chooseAction, pickCpu } from '../game/cpu';
+import { chooseAction } from '../game/cpu';
+import { pickEnemy } from '../game/rival';
 import {
   act, canUse, createBattle, endTurn, foe, MAX_GAUGE, MAX_ROUND, roundOf, startTurn,
   type ActionResult, type ActionType, type BattleState, type Hit, type Side,
@@ -134,7 +135,8 @@ export function Battle({
   /** ふたりで対戦のとき：あいてとのやりとり（無ければ、コンピュータと戦う） */
   net?: NetBattle;
 }) {
-  const [enemy] = useState(() => net?.opponent ?? pickCpu());
+  // コンピュータと対戦の敵は、コンピュータの9体か、ほかの人のロボ（みんなのロボ。動かすのはコンピュータ）
+  const [enemy] = useState(() => net?.opponent ?? pickEnemy());
   const [st] = useState(() => {
     const b = createBattle(player, enemy);
     if (net) b.active = net.iFirst ? 0 : 1; // 先に動く人は、部屋で決めたとおり
@@ -149,7 +151,9 @@ export function Battle({
   const stage = useRef<Stage | null>(null);
   const [hud, setHud] = useState<[SideHud, SideHud]>(() => [snap(st, 0), snap(st, 1)]);
   const [phase, setPhase] = useState<'intro' | 'command' | 'busy' | 'over'>('intro');
-  const [msg, setMsg] = useState('');
+  const [msg, setMsg] = useState(() =>
+    enemy.source === 'rival' ? `だれかのロボ「${enemy.spec.name}」が あらわれた！` : '',
+  );
   const [banner, setBanner] = useState<Banner | null>(null);
   const [popups, setPopups] = useState<Popup[]>([]);
   const [splash, setSplash] = useState<string | null>(null);

@@ -1,6 +1,7 @@
 // Firebase の Cloud Functions：写真をAIに読ませる窓口（/api/health と /api/analyze）と、
 // ロボをクラウドのガレージに入れる窓口（/api/robots。一人30体まで、家族は100体まで。一覧と消すのは、画面が Firestore を直接使う）、
-// その人のガレージの上限を教える窓口（/api/garage）、ガレージのロボの文から習わない漢字を取りのぞく窓口（/api/robots/fix）。
+// その人のガレージの上限を教える窓口（/api/garage）、ガレージのロボの文から習わない漢字を取りのぞく窓口（/api/robots/fix）、
+// ほかの人のロボを一体、コンピュータの敵として返す窓口（/api/rival）。
 // Hosting の書き換え（firebase.json）で、同じドメインの /api/** がここに来る。
 // 写真から作れるのは、Google でログインした人だれでも（2026-11-22 から。それまでは家族だけ）。
 // 回数の上限：家族（ALLOWED_EMAILS）は一人一日30回、家族以外は一人一日10回、家族以外の全員を合わせて一日200回。
@@ -10,9 +11,10 @@ import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore, type DocumentReference } from 'firebase-admin/firestore';
 import { analyzeImage, cacheKey, fixSpecText, type SpecCache } from '../../server/analyze';
 import { garageLimit, makeRobot, readRobotInput } from '../../server/garage';
+import { toRival } from '../../server/rival';
 import { needsTextFix, specHardKanji, withFixedText } from '../../src/game/kanji';
 import { sanitizeSpec } from '../../src/game/spec';
 import type { Character, CharacterSpec } from '../../src/game/types';
@@ -34,6 +36,16 @@ const robots = (uid: string) => db.collection('users').doc(uid).collection('robo
 // ガレージに何体いるか（上限を超えて数えない）
 async function garageCount(uid: string, limit: number) {
   return (await robots(uid).select().limit(limit).get()).size;
+}
+
+// みんなのガレージのロボの一覧（場所だけ）。毎回数えると読む回数が増えるので、10分ごとに読み直す
+let rivalPool: { at: number; refs: DocumentReference[] } | null = null;
+async function rivalRefs() {
+  if (!rivalPool || Date.now() - rivalPool.at > 10 * 60 * 1000) {
+    const snap = await db.collectionGroup('robots').select().get();
+    rivalPool = { at: Date.now(), refs: snap.docs.map((d) => d.ref) };
+  }
+  return rivalPool.refs;
 }
 
 const cache: SpecCache = {
@@ -103,7 +115,8 @@ export const api = onRequest(
     const isRobots = req.path.endsWith('/robots');
     const isFix = req.path.endsWith('/robots/fix');
     const isGarage = req.path.endsWith('/garage');
-    if (!isAnalyze && !isRobots && !isFix && !isGarage) {
+    const isRival = req.path.endsWith('/rival');
+    if (!isAnalyze && !isRobots && !isFix && !isGarage && !isRival) {
       res.status(404).json({ error: 'not found' });
       return;
     }
@@ -125,6 +138,26 @@ export const api = onRequest(
     // ── その人のガレージに何体まで入るか（画面の「◯ / ◯体」と、いっぱいかどうかのため） ──
     if (isGarage) {
       res.json({ limit });
+      return;
+    }
+
+    // ── ほかの人のロボを一体、コンピュータの敵として返す（自分のロボは出さない。写真と持ち主は送らない） ──
+    if (isRival) {
+      try {
+        const refs = (await rivalRefs()).filter((r) => r.parent.parent?.id !== user.uid);
+        // 習わない漢字が残っているロボは出さないので、何体か試す
+        for (let i = 0; i < 4 && refs.length; i++) {
+          const snap = await refs[Math.floor(Math.random() * refs.length)].get();
+          const robot = snap.exists ? toRival(snap.data() ?? {}) : null;
+          if (robot) {
+            res.json({ robot });
+            return;
+          }
+        }
+        res.json({ robot: null });
+      } catch (e) {
+        res.status(500).json({ error: String((e as Error).message).slice(0, 200) });
+      }
       return;
     }
 

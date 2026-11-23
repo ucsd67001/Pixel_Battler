@@ -7,7 +7,8 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { CharacterSpec, Form, HeadType } from '../game/types';
 import { ELEMENT_INFO } from '../game/data';
-import { rngFrom } from '../game/random';
+import { mulberry32 } from '../game/random';
+import { lookSeed } from '../game/spec';
 import { Ease, lerp, type EaseFn, type Tweener } from './anim';
 
 export type Pose = Record<string, [number, number, number]>;
@@ -136,7 +137,7 @@ function makeKit(spec: CharacterSpec) {
 // 設計図から決まった乱数で決める。同じ写真なら設計図も同じなので、いつも同じ体つきになる
 // （ふたりで対戦でも、相手のスマホで同じ体つきに見える）。強さには関係しない
 export function proportionsOf(spec: CharacterSpec) {
-  const r = rngFrom(`body|${spec.name}|${spec.motif}|${spec.colors.primary}|${spec.colors.secondary}|${Object.values(spec.parts).join(',')}`);
+  const r = mulberry32(lookSeed(spec));
   const span = (lo: number, hi: number) => lo + (hi - lo) * r();
   return {
     leg: span(0.85, 1.17), // 脚の長さ
