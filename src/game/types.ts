@@ -59,6 +59,9 @@ export interface CharacterSpec {
   // 見た目（体の比率）の乱数の種。ほかの人のロボを敵に出すときだけ使う。
   // motif（写真に写っていたもの）を送らずに、持ち主の画面と同じ体つきにするため
   look?: number;
+  // 文が「素手で戦うロボ」として書いてあるか（1）。2026-11-23 に全員を素手にしたので、
+  // それより前の AI のロボは、ガレージを開いたときなどに一度だけ AI に書き直してもらう（server/analyze.ts の refreshText）
+  bare?: 1;
 }
 
 export interface Stats {

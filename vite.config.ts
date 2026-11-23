@@ -2,7 +2,7 @@ import { defineConfig, loadEnv, type Connect, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import fs from 'node:fs';
 import path from 'node:path';
-import { analyzeImage, fixSpecText, type SpecCache } from './server/analyze';
+import { analyzeImage, refreshText, type SpecCache } from './server/analyze';
 import { sanitizeSpec } from './src/game/spec';
 import { toRival } from './server/rival';
 import { createHash } from 'node:crypto';
@@ -86,7 +86,7 @@ function apiPlugin(env: Record<string, string>): Plugin {
     if (!apiKey) return send(res, 503, { error: 'no api key' });
     try {
       const body = JSON.parse(await readBody(req, 64 * 1024));
-      const spec = await fixSpecText(sanitizeSpec(body.spec), { apiKey, model });
+      const spec = await refreshText(sanitizeSpec(body.spec), { apiKey, model });
       send(res, 200, { spec });
     } catch (e) {
       send(res, 500, { error: String((e as Error).message).slice(0, 200) });

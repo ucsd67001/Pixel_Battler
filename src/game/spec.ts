@@ -107,6 +107,7 @@ export function sanitizeSpec(raw: any): CharacterSpec {
     trait: pick(r.trait, TRAITS, 'fighter'),
     bonus: r.bonus === 1 ? 1 : 0,
     ...(Number.isInteger(r.look) && r.look >= 0 && r.look < 2 ** 32 ? { look: r.look as number } : {}),
+    ...(r.bare === 1 ? { bare: 1 as const } : {}),
   };
 }
 

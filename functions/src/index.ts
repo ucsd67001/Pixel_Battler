@@ -1,6 +1,6 @@
 // Firebase の Cloud Functions：写真をAIに読ませる窓口（/api/health と /api/analyze）と、
 // ロボをクラウドのガレージに入れる窓口（/api/robots。一人30体まで、家族は100体まで。一覧と消すのは、画面が Firestore を直接使う）、
-// その人のガレージの上限を教える窓口（/api/garage）、ガレージのロボの文から習わない漢字を取りのぞく窓口（/api/robots/fix）、
+// その人のガレージの上限を教える窓口（/api/garage）、ガレージのロボの文を直す窓口（/api/robots/fix。素手で戦う文に・習わない漢字を取りのぞく）、
 // ほかの人のロボを一体、コンピュータの敵として返す窓口（/api/rival）。
 // Hosting の書き換え（firebase.json）で、同じドメインの /api/** がここに来る。
 // 写真から作れるのは、Google でログインした人だれでも（2026-11-22 から。それまでは家族だけ）。
@@ -12,7 +12,7 @@ import { defineSecret } from 'firebase-functions/params';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore, type DocumentReference } from 'firebase-admin/firestore';
-import { analyzeImage, cacheKey, fixSpecText, type SpecCache } from '../../server/analyze';
+import { analyzeImage, cacheKey, refreshText, type SpecCache } from '../../server/analyze';
 import { garageLimit, makeRobot, readRobotInput } from '../../server/garage';
 import { toRival } from '../../server/rival';
 import { needsTextFix, specHardKanji, withFixedText } from '../../src/game/kanji';
@@ -46,6 +46,25 @@ async function rivalRefs() {
     rivalPool = { at: Date.now(), refs: snap.docs.map((d) => d.ref) };
   }
   return rivalPool.refs;
+}
+
+// ガレージのロボの文を、いまの決まりに合わせて書き直して、しまい直す（一体につき一度だけ。強さ・見た目は変えない）。
+//   素手で戦う文になっていない（2026-11-23 より前）・習わない漢字が残っている、のどちらか
+async function fixRobot(ref: DocumentReference, robot: Character): Promise<Character> {
+  if (!needsTextFix(robot)) return robot;
+  const spec = await refreshText(sanitizeSpec(robot.spec), { apiKey: OPENAI_API_KEY.value(), model: MODEL });
+  const fixed = withFixedText(robot, spec);
+  await ref.update({ spec: fixed.spec, skill: fixed.skill, textFixedAt: fixed.textFixedAt });
+  // 同じ写真の取り置き（設計図の控え）も、同じロボのものなら直しておく（次に同じ写真を読んだときのため）
+  const key = cacheKey(robot.seed);
+  const cached = (await cache.get(key).catch(() => null)) as CharacterSpec | null;
+  if (cached) {
+    const c = sanitizeSpec(cached);
+    if (c.name === robot.spec.name && (!c.bare || specHardKanji(c).length))
+      await cache.set(key, { ...c, ...fixed.spec, look: undefined, bonus: c.bonus } as CharacterSpec).catch(() => undefined);
+  }
+  console.log(`[fix] ${robot.spec.name}：${robot.skill.name}／${robot.spec.ultimate.name} → ${fixed.skill.name}／${fixed.spec.ultimate.name}（習わない字：${specHardKanji(fixed.spec).join('') || 'なし'}）`);
+  return fixed;
 }
 
 const cache: SpecCache = {
@@ -148,7 +167,10 @@ export const api = onRequest(
         // 習わない漢字が残っているロボは出さないので、何体か試す
         for (let i = 0; i < 4 && refs.length; i++) {
           const snap = await refs[Math.floor(Math.random() * refs.length)].get();
-          const robot = snap.exists ? toRival(snap.data() ?? {}) : null;
+          if (!snap.exists) continue;
+          // 前に作ったロボは、出す前に文を直す（持ち主のガレージも直る。直せなくても、そのまま出す）
+          const data = await fixRobot(snap.ref, snap.data() as Character).catch(() => snap.data() as Character);
+          const robot = toRival(data);
           if (robot) {
             res.json({ robot });
             return;
@@ -177,21 +199,7 @@ export const api = onRequest(
           res.status(404).json({ error: 'not found' });
           return;
         }
-        const robot = snap.data() as Character;
-        if (!needsTextFix(robot)) {
-          res.json({ robot });
-          return;
-        }
-        const spec = await fixSpecText(sanitizeSpec(robot.spec), { apiKey: OPENAI_API_KEY.value(), model: MODEL });
-        const fixed = withFixedText(robot, spec);
-        await ref.update({ spec: fixed.spec, skill: fixed.skill, textFixedAt: fixed.textFixedAt });
-        // 同じ写真の取り置き（設計図の控え）も、同じロボのものなら直しておく（次に同じ写真を読んだときのため）
-        const key = cacheKey(hash);
-        const cached = (await cache.get(key).catch(() => null)) as CharacterSpec | null;
-        if (cached && cached.name === robot.spec.name && specHardKanji(sanitizeSpec(cached)).length)
-          await cache.set(key, { ...sanitizeSpec(cached), ...fixed.spec, bonus: sanitizeSpec(cached).bonus }).catch(() => undefined);
-        console.log(`[fix] ${robot.spec.name}：${specHardKanji(robot.spec).join('')} → ${specHardKanji(fixed.spec).join('') || 'なし'}`);
-        res.json({ robot: fixed });
+        res.json({ robot: await fixRobot(ref, snap.data() as Character) });
       } catch (e) {
         res.status(500).json({ error: String((e as Error).message).slice(0, 200) });
       }

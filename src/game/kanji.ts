@@ -32,9 +32,14 @@ export function specHardKanji(s: CharacterSpec): string[] {
   return hardKanji(text);
 }
 
-/** ガレージで文を書き直すロボか（AI で作った・まだ書き直していない・習わない漢字がある） */
+/**
+ * 文を書き直すロボか（AI で作ったロボだけ）：
+ *   ・素手で戦う文になっていない（2026-11-23 より前に作った）
+ *   ・まだ書き直していなくて、習わない漢字がある
+ */
 export function needsTextFix(c: Character): boolean {
-  return c.source === 'ai' && !c.textFixedAt && specHardKanji(c.spec).length > 0;
+  if (c.source !== 'ai') return false;
+  return !c.spec.bare || (!c.textFixedAt && specHardKanji(c.spec).length > 0);
 }
 
 /** 書き直した設計図の文を、ロボに入れる（強さ・見た目は、そのまま） */
@@ -49,6 +54,7 @@ export function withFixedText(c: Character, spec: CharacterSpec): Character {
       description: spec.description,
       skill: { ...c.spec.skill, name: spec.skill.name, description: spec.skill.description },
       ultimate: { ...c.spec.ultimate, name: spec.ultimate.name, description: spec.ultimate.description, shout: spec.ultimate.shout },
+      ...(spec.bare ? { bare: 1 as const } : {}),
     },
     skill: { ...c.skill, name: spec.skill.name, description: spec.skill.description },
     textFixedAt: Date.now(),
