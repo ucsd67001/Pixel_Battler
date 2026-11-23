@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { Character } from '../game/types';
-import { ELEMENT_INFO, FORM_INFO, SKILL_TABLE, TRAIT_TABLE, ULT_TABLE, WEAPON_LABEL } from '../game/data';
+import { ELEMENT_INFO, FORM_INFO, SKILL_TABLE, TRAIT_TABLE, ULT_TABLE } from '../game/data';
 import { STAT_RANGE } from '../game/stats';
 import { elementTip, GLOSSARY, traitTip, type Tip } from '../game/glossary';
 import { Term } from './Term';
@@ -55,9 +55,7 @@ export function CharacterCard({ c, compact }: { c: Character; compact?: boolean 
             特性：{tr.label}
           </Term>
         )}
-        <Term tip={GLOSSARY.weapon} className="chip">
-          武器：{WEAPON_LABEL[s.parts.weapon]}
-        </Term>
+        {/* 武器の札は出さない（いまは、どのロボも素手。2026-11-23） */}
       </div>
       <div className="stats">
         <StatBar label="HP" tip={GLOSSARY.hp} value={c.stats.hp} range={STAT_RANGE.hp} />

@@ -9,6 +9,7 @@ import type { CharacterSpec, Form, HeadType } from '../game/types';
 import { ELEMENT_INFO } from '../game/data';
 import { mulberry32 } from '../game/random';
 import { lookSeed } from '../game/spec';
+import { wornParts } from '../game/items';
 import { Ease, lerp, type EaseFn, type Tweener } from './anim';
 
 export type Pose = Record<string, [number, number, number]>;
@@ -128,9 +129,10 @@ function makeKit(spec: CharacterSpec) {
     return mesh(g, mat);
   };
   const W = spec.parts.body === 'slim' ? 0.88 : spec.parts.body === 'heavy' ? 1.14 : 1;
-  const B = proportionsOf(spec);
+  const B = proportionsOf(spec); // 体つきは、もとの設計図から（武器を外しても変わらない）
   const extraMats: THREE.Material[] = [];
-  return { spec, M, geos, extraMats, mesh, box, prism, cyl, cone, sphere, group, pivot, poly, slab, W, B };
+  // 部品は「いま身につけているもの」で作る（いまは素手。src/game/items.ts）
+  return { spec: { ...spec, parts: wornParts(spec) }, M, geos, extraMats, mesh, box, prism, cyl, cone, sphere, group, pivot, poly, slab, W, B };
 }
 
 // ── 体の比率（ロボごとに少しずつちがう） ──

@@ -8,6 +8,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { CharacterSpec, UltStyle } from '../game/types';
 import { ELEMENT_INFO } from '../game/data';
+import { wornParts } from '../game/items';
 import { Ease, lerp, Tweener, type EaseFn } from './anim';
 import { Effects, addMat } from './effects';
 import { sfx } from '../lib/sfx';
@@ -446,7 +447,7 @@ export class Stage {
   }
 
   async attack(side: Side, hits: number, onImpact: ImpactFn, variant: 'normal' | 'skill' | 'hex' = 'normal') {
-    const w = this.robots[side]!.spec.parts.weapon;
+    const w = wornParts(this.robots[side]!.spec).weapon;
     if (variant === 'hex') return this.orb(side, onImpact);
     if (w === 'rifle') return this.shoot(side, hits, onImpact, variant === 'skill');
     return this.melee(side, hits, onImpact);
@@ -457,7 +458,7 @@ export class Stage {
     const foe = (1 - side) as Side;
     const dir = this.dir(side);
     const c = this.color(side);
-    const swing = ['sword', 'hammer'].includes(r.spec.parts.weapon);
+    const swing = ['sword', 'hammer'].includes(wornParts(r.spec).weapon);
     const wind = swing ? 'windup' : 'pullback';
     const strike = swing ? 'slash' : 'thrust';
     const home = this.homeX[side];

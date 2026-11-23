@@ -408,7 +408,8 @@ button {
 }
 @media (max-width: 820px) {
   .split {
-    grid-template-columns: 1fr;
+    /* minmax(0, …)：長い一行（SCAN の文など）があっても、列が画面より広がらないように（2026-11-23） */
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 46vh auto;
     overflow-y: auto;
   }
