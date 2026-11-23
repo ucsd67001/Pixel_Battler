@@ -13,7 +13,7 @@ import { needsTextFix, withFixedText } from './kanji';
 import { sanitizeSpec } from './spec';
 import { EXP_PER_WIN, growthOf } from './level';
 import { afterWin, canWin, EMPTY_STORY, readStory, type StoryProgress } from './story';
-import { firestore, idToken, useUser } from '../lib/firebase';
+import { currentUser, firestore, idToken, useUser } from '../lib/firebase';
 
 const CLOUD = !import.meta.env.DEV;
 
@@ -284,7 +284,9 @@ export function useGarage(): Garage {
   };
 
   const win = async (c: Character, chapter: number, slot: number): Promise<WinResult> => {
-    if (isCloud) {
+    // 本番では、いつもサーバーに送る（この画面のログインの状態を読み終える前でも。2026-11-23、
+    // 勝った直後にまだ読み終えていなくて、このスマホの中に記録しようとして失敗していた）
+    if (CLOUD && firestore() && (isCloud || currentUser())) {
       const token = await idToken();
       if (!token) throw new Error('login required');
       const r = await fetch('/api/robots/win', {

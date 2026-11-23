@@ -230,24 +230,25 @@ function StoryResult({
 }) {
   const garage = useGarage();
   const [win, setWin] = useState<WinResult | null>(null);
-  const [err, setErr] = useState(false);
+  const [err, setErr] = useState('');
   const sent = useRef(false);
   const send = () => {
-    setErr(false);
+    setErr('');
     garage
       .win(robot, no, slot)
       .then(setWin)
       .catch((e) => {
         console.warn('[story] win', e);
-        setErr(true);
+        setErr(String((e as Error)?.message ?? e) || 'error'); // 理由も小さく出す（スクショで原因が分かるように）
       });
   };
   useEffect(() => {
-    if (result !== 'win' || sent.current) return;
+    // ガレージ（ログインの状態）を読み終えてから送る
+    if (result !== 'win' || sent.current || !garage.ready) return;
     sent.current = true;
     send();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [result]);
+  }, [result, garage.ready]);
 
   const name = robot.spec.name;
   if (result !== 'win')
@@ -270,7 +271,7 @@ function StoryResult({
   if (err)
     return (
       <div className="story-result">
-        <div className="error">勝ちを 記録できませんでした。電波のよいところで、もう一度 送ってください。</div>
+        <div className="error">勝ちを 記録できませんでした。電波のよいところで、もう一度 送ってください。<small className="err-detail">（{err}）</small></div>
         <div className="actions row">
           <button className="btn primary" onClick={send}>
             もう一度 送る

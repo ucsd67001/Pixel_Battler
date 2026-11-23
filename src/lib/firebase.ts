@@ -48,7 +48,8 @@ export async function idToken(): Promise<string | null> {
 
 // ログインの状態。undefined＝まだ分からない、null＝ログインしていない
 export function useUser() {
-  const [user, setUser] = useState<User | null | undefined>(auth ? undefined : null);
+  // もうログインが分かっていれば、はじめからその人にする（画面を開いた直後に「まだ分からない」と見えないように）
+  const [user, setUser] = useState<User | null | undefined>(auth ? (auth.currentUser ?? undefined) : null);
   useEffect(() => (auth ? onAuthStateChanged(auth, setUser) : undefined), []);
   return user;
 }
