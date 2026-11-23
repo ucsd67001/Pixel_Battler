@@ -1,7 +1,8 @@
 // Firebase の Cloud Functions：写真をAIに読ませる窓口（/api/health と /api/analyze）と、
 // ロボをクラウドのガレージに入れる窓口（/api/robots。一人30体まで、家族は100体まで。一覧と消すのは、画面が Firestore を直接使う）、
 // その人のガレージの上限を教える窓口（/api/garage）、ガレージのロボの文を直す窓口（/api/robots/fix。素手で戦う文に・習わない漢字を取りのぞく）、
-// ほかの人のロボを一体、コンピュータの敵として返す窓口（/api/rival）。
+// ほかの人のロボを一体、コンピュータの敵として返す窓口（/api/rival）、
+// ストーリーで勝ったロボに経験値を足す窓口（/api/robots/win。2026-11-23 から。レベルと経験値を書くのはサーバーだけ）。
 // Hosting の書き換え（firebase.json）で、同じドメインの /api/** がここに来る。
 // 写真から作れるのは、Google でログインした人だれでも（2026-11-22 から。それまでは家族だけ）。
 // 回数の上限：家族（ALLOWED_EMAILS）は一人一日30回、家族以外は一人一日10回、家族以外の全員を合わせて一日200回。
@@ -13,7 +14,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore, type DocumentReference } from 'firebase-admin/firestore';
 import { analyzeImage, cacheKey, refreshText, type SpecCache } from '../../server/analyze';
-import { garageLimit, makeRobot, readRobotInput } from '../../server/garage';
+import { addWin, garageLimit, makeRobot, MIN_WIN_GAP, readRobotInput, readWinInput } from '../../server/garage';
 import { toRival } from '../../server/rival';
 import { needsTextFix, specHardKanji, withFixedText } from '../../src/game/kanji';
 import { sanitizeSpec } from '../../src/game/spec';
@@ -135,7 +136,8 @@ export const api = onRequest(
     const isFix = req.path.endsWith('/robots/fix');
     const isGarage = req.path.endsWith('/garage');
     const isRival = req.path.endsWith('/rival');
-    if (!isAnalyze && !isRobots && !isFix && !isGarage && !isRival) {
+    const isWin = req.path.endsWith('/robots/win');
+    if (!isAnalyze && !isRobots && !isFix && !isGarage && !isRival && !isWin) {
       res.status(404).json({ error: 'not found' });
       return;
     }
@@ -177,6 +179,38 @@ export const api = onRequest(
           }
         }
         res.json({ robot: null });
+      } catch (e) {
+        res.status(500).json({ error: String((e as Error).message).slice(0, 200) });
+      }
+      return;
+    }
+
+    // ── ストーリーで勝ったロボに、経験値を足す（勝ったロボだけ。負けても減らない） ──
+    // 前の勝ちから MIN_WIN_GAP より短い知らせは数えない（users/{uid} の lastWinAt。画面からは読み書きできない場所）
+    if (isWin) {
+      try {
+        const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+        const inp = readWinInput(body);
+        if (!inp) {
+          res.status(400).json({ error: 'bad win' });
+          return;
+        }
+        const ref = robots(user.uid).doc(inp.hash);
+        const userRef = db.collection('users').doc(user.uid);
+        const out = await db.runTransaction(async (tx) => {
+          const [snap, me] = await Promise.all([tx.get(ref), tx.get(userRef)]);
+          if (!snap.exists) return 'missing' as const;
+          const now = Date.now();
+          const last = Number(me.data()?.lastWinAt ?? 0);
+          const robot = snap.data() as Character;
+          if (now - last < MIN_WIN_GAP) return { counted: false, exp: robot.exp ?? 0, level: robot.level ?? 1, up: false };
+          const w = addWin(robot);
+          tx.update(ref, { exp: w.exp, level: w.level });
+          tx.set(userRef, { lastWinAt: now, lastWin: { chapter: inp.chapter, slot: inp.slot } }, { merge: true });
+          return { counted: true, exp: w.exp, level: w.level, up: w.up };
+        });
+        if (out === 'missing') res.status(404).json({ error: 'not found' });
+        else res.json(out);
       } catch (e) {
         res.status(500).json({ error: String((e as Error).message).slice(0, 200) });
       }

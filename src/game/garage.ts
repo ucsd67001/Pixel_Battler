@@ -11,6 +11,7 @@ import type { Character } from './types';
 import { deleteCharacter, findBySeed, garageFullMsg, GARAGE_LIMIT, loadHangar, saveCharacter, updateCharacter } from './storage';
 import { needsTextFix, withFixedText } from './kanji';
 import { sanitizeSpec } from './spec';
+import { EXP_PER_WIN, growthOf } from './level';
 import { firestore, idToken, useUser } from '../lib/firebase';
 
 const CLOUD = !import.meta.env.DEV;
@@ -114,6 +115,14 @@ async function fixTexts(list: Character[], cloud: boolean, changed: () => void) 
   }
 }
 
+// ストーリーで勝ったときの知らせの答え。counted＝数えたか（前の勝ちからすぐの知らせは数えない）・up＝レベルが上がったか
+export interface WinResult {
+  counted: boolean;
+  exp: number;
+  level: number;
+  up: boolean;
+}
+
 export interface Garage {
   list: Character[];
   ready: boolean; // 一覧を読み終えたか
@@ -124,6 +133,8 @@ export interface Garage {
   find(seed: string): Character | undefined;
   add(c: Character): Promise<Character>;
   remove(c: Character): Promise<void>;
+  // ストーリーで勝ったロボに、経験値を足す（2026-11-23。クラウドではサーバーが書く。chapter＝何章・slot＝何体目（0〜4））
+  win(c: Character, chapter: number, slot: number): Promise<WinResult>;
 }
 
 export function useGarage(): Garage {
@@ -221,6 +232,28 @@ export function useGarage(): Garage {
     setLocal(loadHangar());
   };
 
+  const win = async (c: Character, chapter: number, slot: number): Promise<WinResult> => {
+    if (isCloud) {
+      const token = await idToken();
+      if (!token) throw new Error('login required');
+      const r = await fetch('/api/robots/win', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ hash: c.seed, chapter, slot }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return (await r.json()) as WinResult; // ガレージの一覧は onSnapshot で新しくなる
+    }
+    // 手元・クラウドにつながらないとき：このスマホの中のロボに足す
+    const cur = findBySeed(c.seed);
+    if (!cur) throw new Error('not found');
+    const before = growthOf(cur.exp);
+    const after = growthOf(before.exp + EXP_PER_WIN);
+    updateCharacter({ ...cur, exp: after.exp, level: after.level });
+    setLocal(loadHangar());
+    return { counted: true, exp: after.exp, level: after.level, up: after.level > before.level };
+  };
+
   return {
     list,
     ready,
@@ -231,5 +264,6 @@ export function useGarage(): Garage {
     find: (seed) => list.find((c) => c.seed === seed),
     add,
     remove,
+    win,
   };
 }

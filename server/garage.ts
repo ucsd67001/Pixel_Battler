@@ -8,6 +8,7 @@ import { buildCharacter } from '../src/game/stats';
 import { localSpec } from '../src/game/fallback';
 import { sanitizeSpec } from '../src/game/spec';
 import type { Character, CharacterSpec } from '../src/game/types';
+import { EXP_PER_WIN, growthOf, MAX_EXP } from '../src/game/level';
 
 export const GARAGE_LIMIT = 30;
 export const FAMILY_GARAGE_LIMIT = 100; // 家族（ALLOWED_EMAILS）は100体まで（2026-11-23 から）
@@ -51,5 +52,39 @@ export function makeRobot(inp: RobotInput, cached: CharacterSpec | null): Charac
   }
   // 前にこのスマホで作ったロボを移すときは、作った日を残す（ガレージの並び順のため）
   if (inp.createdAt) c.createdAt = inp.createdAt;
+  // 育てた分（経験値・レベル）は、画面から届いても受け取らない。どのロボも Lv1 から
+  delete c.exp;
+  delete c.level;
+  delete c.fightLevel;
   return c;
+}
+
+// ── ストーリーで勝ったときの経験値（2026-11-23。docs/STORY.md の段階3）──
+// ずるの歯止め（はじめはこれで十分）：一人につき、前の勝ちから MIN_WIN_GAP より短い知らせは数えない。
+// バトルは演出があるので、どんなに速くても1戦に30秒ほどかかる
+export const MIN_WIN_GAP = 20 * 1000;
+
+export interface WinInput {
+  hash: string;
+  chapter: number; // 何章で勝ったか（1〜99）
+  slot: number; // 章の何体目に勝ったか（0〜4。4 がボス）
+}
+
+/** 勝ちの知らせの中身を確かめる。おかしければ null */
+export function readWinInput(body: any): WinInput | null {
+  const b = body ?? {};
+  const hash = String(b.hash ?? '');
+  const chapter = Number(b.chapter);
+  const slot = Number(b.slot);
+  if (!HASH.test(hash)) return null;
+  if (!Number.isInteger(chapter) || chapter < 1 || chapter > 99) return null;
+  if (!Number.isInteger(slot) || slot < 0 || slot > 4) return null;
+  return { hash, chapter, slot };
+}
+
+/** 1勝ぶんの経験値を足した、新しい経験値とレベル */
+export function addWin(robot: Pick<Character, 'exp'>) {
+  const before = growthOf(robot.exp);
+  const after = growthOf(Math.min(MAX_EXP, before.exp + EXP_PER_WIN));
+  return { exp: after.exp, level: after.level, before: before.level, up: after.level > before.level };
 }

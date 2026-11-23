@@ -3,6 +3,7 @@
 
 import type { Character } from './types';
 import { elementMultiplier, SKILL_TABLE, ULT_POWER, ULT_TABLE } from './data';
+import { fightMult } from './level';
 
 const BONUS_SKILL = 1.1;
 
@@ -133,7 +134,8 @@ export function startTurn(st: BattleState): PreTurn {
   const me = st.f[side];
   me.guarding = false;
   if (me.cooldown > 0) me.cooldown--;
-  me.sp = Math.min(me.c.stats.sp, me.sp + (me.c.spec.trait === 'focus' ? 20 : 10));
+  // SP のたまる量も、レベルの倍率で大きくする（スキルに使う SP も同じ割合で大きいので、使える回数は Lv1 と同じ）
+  me.sp = Math.min(me.c.stats.sp, me.sp + Math.round((me.c.spec.trait === 'focus' ? 20 : 10) * fightMult(me.c)));
   let regen = 0;
   if (me.c.spec.trait === 'regen' && me.hp > 0 && me.hp < me.c.stats.hp) {
     regen = Math.min(me.c.stats.hp - me.hp, Math.round(me.c.stats.hp * 0.018));
@@ -190,7 +192,10 @@ function dealDamage(st: BattleState, attacker: Side, mult: number, rng: Rng, opt
     return { target: t, amount: 0, crit: false, eff, guarded: false, hpAfter: D.hp, guts: false, miss: true };
   }
   const crit = rng() < (A.c.spec.trait === 'lucky' ? 0.3 : 0.08);
-  let dmg = atk * m * 1.35 * (300 / (300 + def)) * eff * (crit ? 1.5 : 1) * (0.92 + rng() * 0.16);
+  // ぼうぎょの効き方の「300」は、受ける側のレベルの倍率で大きくする。
+  // こうすると、同じレベルどうしなら Lv1 でも Lv99 でもバトルの長さが同じになる（数字が大きくなっても、ぼうぎょが効きすぎない）
+  const K = 300 * fightMult(D.c);
+  let dmg = atk * m * 1.35 * (K / (K + def)) * eff * (crit ? 1.5 : 1) * (0.92 + rng() * 0.16);
   const guarded = D.guarding && !opts.ignoreGuard;
   if (guarded) dmg *= opts.ult ? 0.5 : 0.4;
   if (D.counter && !opts.isCounter) dmg *= 0.5;
@@ -236,7 +241,7 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
     case 'guard':
       res.name = 'ガード＆リペア';
       A.guarding = true;
-      A.sp = Math.min(A.c.stats.sp, A.sp + 15);
+      A.sp = Math.min(A.c.stats.sp, A.sp + Math.round(15 * fightMult(A.c)));
       addGauge(A, 10);
       // 守りながら、体勢を立て直して回復する。続けてガードしたときは回復しない（ガードだけをくり返して、終わらなくならないように）
       if (!A.lastGuard) heal(A.c.stats.hp * GUARD_HEAL);

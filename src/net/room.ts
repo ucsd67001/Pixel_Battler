@@ -10,6 +10,7 @@
 //   ・手元で試すときは、URL に ?localroom を付けると、同じブラウザの二つのタブで話す（開発中だけ）
 
 import type { ActionType } from '../game/battle';
+import { withoutGrowth } from '../game/level';
 import type { Character } from '../game/types';
 import { currentUser, firestore } from '../lib/firebase';
 import {
@@ -65,7 +66,8 @@ function normalize(raw: RawRoom, now = Date.now()): RoomState {
 
 // 部屋に送るロボ：写真（thumb）を外す（知らない人に、家族の写真を見せないため）
 export function publicChar(c: Character): Character {
-  const { thumb: _thumb, ...rest } = c;
+  // ふたりで対戦は、レベルを使わない（どちらも Lv1 の数字で戦う。2026-11-23）
+  const { thumb: _thumb, ...rest } = withoutGrowth(c);
   return rest;
 }
 

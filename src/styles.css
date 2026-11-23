@@ -559,6 +559,38 @@ button {
   font-size: 10px;
   margin-left: 4px;
 }
+/* レベル（2026-11-23） */
+.growth {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12px;
+}
+.growth-lv {
+  font-family: var(--mono);
+  color: var(--el);
+  white-space: nowrap;
+}
+.growth-lv b {
+  font-size: 20px;
+  margin-left: 2px;
+}
+.growth-bar {
+  flex: 1;
+  min-width: 40px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.growth-bar span {
+  display: block;
+  height: 100%;
+  background: var(--el);
+}
+.growth-next {
+  color: var(--muted);
+  white-space: nowrap;
+}
 .stats {
   margin-top: 14px;
   display: grid;
@@ -688,6 +720,14 @@ button {
 .roster-name {
   font-weight: 700;
   font-size: 13px;
+  display: grid;
+  text-align: left;
+}
+.roster-name small {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
 }
 .empty {
   margin: auto;

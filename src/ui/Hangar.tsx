@@ -3,6 +3,7 @@ import type { Character } from '../game/types';
 import { useGarage } from '../game/garage';
 import { prefetchRival } from '../game/rival';
 import { ELEMENT_INFO } from '../game/data';
+import { levelOf } from '../game/level';
 import { CharacterCard } from './CharacterCard';
 import { Showcase } from './StageView';
 
@@ -17,6 +18,7 @@ export function Hangar({
   pick?: boolean;
 }) {
   const garage = useGarage();
+  if (import.meta.env.DEV) (window as any).__garage = garage; // 試すときに経験値を足すため（開発中だけ）
   const list = garage.list;
   const [selSeed, setSelSeed] = useState<string | null>(null);
   const sel = list.find((c) => c.seed === selSeed) ?? list[0] ?? null;
@@ -87,7 +89,10 @@ export function Hangar({
                   onClick={() => setSel(c)}
                 >
                   {c.thumb ? <img src={c.thumb} alt="" /> : <span className="noimg" />}
-                  <span className="roster-name">{c.spec.name}</span>
+                  <span className="roster-name">
+                    {c.spec.name}
+                    <small>Lv{levelOf(c)}</small>
+                  </span>
                   <span className={`rank mini rank-${c.rank}`}>{c.rank}</span>
                 </button>
               ))}

@@ -96,4 +96,10 @@ export interface Character {
   source: 'ai' | 'local' | 'cpu' | 'rival'; // rival＝ほかの人のガレージから来た敵
   // 文の習わない漢字を、ガレージで書き直した日（一体につき一度だけ。漢字の決まりを入れる前に作ったロボのため）
   textFixedAt?: number;
+  // ストーリーで育てた分（2026-11-23。src/game/level.ts）。経験値の合計と、そこから出したレベル。
+  // ガレージのロボだけが持つ。書きこむのはサーバーだけ（/api/robots/win）。stats は、もとの（Lv1 の）数字のまま
+  exp?: number;
+  level?: number;
+  // ストーリーのバトルで、そのレベルの数字にしてあるロボ（atLevel で付く）。バトルの計算が、SP のたまり方とぼうぎょの効き方を合わせるのに使う
+  fightLevel?: number;
 }

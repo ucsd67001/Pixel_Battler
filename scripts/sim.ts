@@ -7,6 +7,8 @@ import { buildCharacter } from '../src/game/stats';
 import { CPU_CHARACTERS, chooseAction } from '../src/game/cpu';
 import { act, createBattle, endTurn, startTurn } from '../src/game/battle';
 import { ELEMENTS, TRAITS } from '../src/game/types';
+import type { Character } from '../src/game/types';
+import { atLevel } from '../src/game/level';
 
 const N = 1500 * CPU_CHARACTERS.length;
 let wins = 0;
@@ -70,4 +72,37 @@ for (const [name, tbl] of [
         .map(([k, [w, n]]) => `${k} ${pct(w, n)}`)
         .join(' / '),
   );
+}
+
+// ── レベル（2026-11-23。src/game/level.ts）──
+// ランダムなロボを、ランダムな敵九体と、レベルを変えて戦わせる。
+//   ・同じレベルどうしなら、Lv1 でも Lv99 でも、行動数と引き分けがほぼ同じになるのがよい
+//   ・レベルが上のほうが、はっきり勝ちやすくなるのがよい
+function fight(a: Character, b: Character) {
+  const st = createBattle(a, b);
+  while (!st.over && st.turn < 200) {
+    startTurn(st);
+    act(st, chooseAction(st, st.active, Math.random), Math.random);
+    if (st.over) break;
+    endTurn(st);
+  }
+  return st;
+}
+const M = 4000;
+console.log('レベル（自分 対 敵）：');
+for (const [me, them] of [[1, 1], [50, 50], [99, 99], [2, 1], [5, 1], [11, 1], [9, 5], [60, 50], [99, 89]]) {
+  let w = 0;
+  let n = 0;
+  let draw = 0;
+  for (let i = 0; i < M; i++) {
+    const seed = 'lv' + i;
+    const colors = ['#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0')];
+    const spec = { ...localSpec(seed, colors), element: pick(ELEMENTS), trait: pick(TRAITS) };
+    const c = atLevel(buildCharacter(spec, seed, 'local'), me);
+    const st = fight(c, atLevel(pick(CPU_CHARACTERS), them));
+    if (st.winner === 0) w++;
+    if (st.draw) draw++;
+    n += st.turn;
+  }
+  console.log(`  Lv${me} 対 Lv${them}：勝率 ${pct(w, M)}  平均の行動数 ${(n / M).toFixed(1)}  引き分け ${pct(draw, M)}`);
 }
