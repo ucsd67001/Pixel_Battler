@@ -1,4 +1,4 @@
-import type { CharacterSpec } from './types';
+import type { Character, CharacterSpec } from './types';
 
 // 小学校で習う漢字（学年別漢字配当表・2020年度から。1026字）。
 // 出どころ：ウィキペディア「学年別漢字配当表」。メインの遊び手は小学6年生なので、画面の言葉と名前はこの字だけで書く。
@@ -30,4 +30,27 @@ export function specHardKanji(s: CharacterSpec): string[] {
     s.ultimate.name, s.ultimate.description, s.ultimate.shout,
   ].join(' ');
   return hardKanji(text);
+}
+
+/** ガレージで文を書き直すロボか（AI で作った・まだ書き直していない・習わない漢字がある） */
+export function needsTextFix(c: Character): boolean {
+  return c.source === 'ai' && !c.textFixedAt && specHardKanji(c.spec).length > 0;
+}
+
+/** 書き直した設計図の文を、ロボに入れる（強さ・見た目は、そのまま） */
+export function withFixedText(c: Character, spec: CharacterSpec): Character {
+  return {
+    ...c,
+    spec: {
+      ...c.spec,
+      motif: spec.motif,
+      name: spec.name,
+      title: spec.title,
+      description: spec.description,
+      skill: { ...c.spec.skill, name: spec.skill.name, description: spec.skill.description },
+      ultimate: { ...c.spec.ultimate, name: spec.ultimate.name, description: spec.ultimate.description, shout: spec.ultimate.shout },
+    },
+    skill: { ...c.skill, name: spec.skill.name, description: spec.skill.description },
+    textFixedAt: Date.now(),
+  };
 }

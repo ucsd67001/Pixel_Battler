@@ -36,6 +36,11 @@ export function saveCharacter(c: Character) {
   save(list.slice(0, GARAGE_LIMIT));
 }
 
+/** 同じロボを、並び順を変えずに入れかえる */
+export function updateCharacter(c: Character) {
+  save(loadHangar().map((x) => (x.seed === c.seed ? c : x)));
+}
+
 export function deleteCharacter(id: string) {
   save(loadHangar().filter((x) => x.id !== id));
 }

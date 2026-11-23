@@ -2,7 +2,8 @@ import { defineConfig, loadEnv, type Connect, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import fs from 'node:fs';
 import path from 'node:path';
-import { analyzeImage, type SpecCache } from './server/analyze';
+import { analyzeImage, fixSpecText, type SpecCache } from './server/analyze';
+import { sanitizeSpec } from './src/game/spec';
 
 // 鍵を探す：① .env の OPENAI_API_KEY ② .env の KEY_ENV_FILE が指す別のファイルの OPENAI_API_KEY
 // ⚠️ 鍵は表示しない
@@ -77,9 +78,23 @@ function apiPlugin(env: Record<string, string>): Plugin {
     }
   };
 
+  // 手元のガレージ（このスマホの中）のロボの文から、習わない漢字を取りのぞく。設計図を受け取り、直した設計図を返す
+  const fixText: Connect.NextHandleFunction = async (req, res) => {
+    if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
+    if (!apiKey) return send(res, 503, { error: 'no api key' });
+    try {
+      const body = JSON.parse(await readBody(req, 64 * 1024));
+      const spec = await fixSpecText(sanitizeSpec(body.spec), { apiKey, model });
+      send(res, 200, { spec });
+    } catch (e) {
+      send(res, 500, { error: String((e as Error).message).slice(0, 200) });
+    }
+  };
+
   const mount = (m: Connect.Server) => {
     m.use('/api/health', health);
     m.use('/api/analyze', analyze);
+    m.use('/api/fix-text', fixText);
   };
 
   return {

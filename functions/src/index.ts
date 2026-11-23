@@ -1,5 +1,6 @@
 // Firebase の Cloud Functions：写真をAIに読ませる窓口（/api/health と /api/analyze）と、
-// ロボをクラウドのガレージに入れる窓口（/api/robots。一人30体まで。一覧と消すのは、画面が Firestore を直接使う）。
+// ロボをクラウドのガレージに入れる窓口（/api/robots。一人30体まで。一覧と消すのは、画面が Firestore を直接使う）、
+// ガレージのロボの文から習わない漢字を取りのぞく窓口（/api/robots/fix）。
 // Hosting の書き換え（firebase.json）で、同じドメインの /api/** がここに来る。
 // 写真から作れるのは、Google でログインした人だれでも（2026-11-22 から。それまでは家族だけ）。
 // 回数の上限：家族（ALLOWED_EMAILS）は一人一日30回、家族以外は一人一日10回、家族以外の全員を合わせて一日200回。
@@ -10,9 +11,11 @@ import { defineSecret } from 'firebase-functions/params';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
-import { analyzeImage, cacheKey, type SpecCache } from '../../server/analyze';
+import { analyzeImage, cacheKey, fixSpecText, type SpecCache } from '../../server/analyze';
 import { GARAGE_LIMIT, makeRobot, readRobotInput } from '../../server/garage';
-import type { CharacterSpec } from '../../src/game/types';
+import { needsTextFix, specHardKanji, withFixedText } from '../../src/game/kanji';
+import { sanitizeSpec } from '../../src/game/spec';
+import type { Character, CharacterSpec } from '../../src/game/types';
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 const ALLOWED_EMAILS = defineSecret('ALLOWED_EMAILS'); // カンマ区切り
@@ -98,7 +101,8 @@ export const api = onRequest(
     }
     const isAnalyze = req.path.endsWith('/analyze');
     const isRobots = req.path.endsWith('/robots');
-    if (!isAnalyze && !isRobots) {
+    const isFix = req.path.endsWith('/robots/fix');
+    if (!isAnalyze && !isRobots && !isFix) {
       res.status(404).json({ error: 'not found' });
       return;
     }
@@ -115,6 +119,43 @@ export const api = onRequest(
       return;
     }
     const family = isFamily(user.email);
+
+    // ── ガレージのロボの文から、小学校で習わない漢字を取りのぞく（一体につき一度だけ。強さ・見た目は変えない） ──
+    // 漢字の決まりを入れる前（2026-11-22 の昼）に作ったロボのため。回数の上限には数えない
+    if (isFix) {
+      try {
+        const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+        const hash = String(body?.hash ?? '');
+        if (!/^[a-f0-9]{64}$/.test(hash)) {
+          res.status(400).json({ error: 'bad hash' });
+          return;
+        }
+        const ref = robots(user.uid).doc(hash);
+        const snap = await ref.get();
+        if (!snap.exists) {
+          res.status(404).json({ error: 'not found' });
+          return;
+        }
+        const robot = snap.data() as Character;
+        if (!needsTextFix(robot)) {
+          res.json({ robot });
+          return;
+        }
+        const spec = await fixSpecText(sanitizeSpec(robot.spec), { apiKey: OPENAI_API_KEY.value(), model: MODEL });
+        const fixed = withFixedText(robot, spec);
+        await ref.update({ spec: fixed.spec, skill: fixed.skill, textFixedAt: fixed.textFixedAt });
+        // 同じ写真の取り置き（設計図の控え）も、同じロボのものなら直しておく（次に同じ写真を読んだときのため）
+        const key = cacheKey(hash);
+        const cached = (await cache.get(key).catch(() => null)) as CharacterSpec | null;
+        if (cached && cached.name === robot.spec.name && specHardKanji(sanitizeSpec(cached)).length)
+          await cache.set(key, { ...sanitizeSpec(cached), ...fixed.spec, bonus: sanitizeSpec(cached).bonus }).catch(() => undefined);
+        console.log(`[fix] ${robot.spec.name}：${specHardKanji(robot.spec).join('')} → ${specHardKanji(fixed.spec).join('') || 'なし'}`);
+        res.json({ robot: fixed });
+      } catch (e) {
+        res.status(500).json({ error: String((e as Error).message).slice(0, 200) });
+      }
+      return;
+    }
 
     // ── ロボをクラウドのガレージに入れる ──
     if (isRobots) {

@@ -85,4 +85,6 @@ export interface Character {
   createdAt: number;
   thumb?: string;
   source: 'ai' | 'local' | 'cpu';
+  // 文の習わない漢字を、ガレージで書き直した日（一体につき一度だけ。漢字の決まりを入れる前に作ったロボのため）
+  textFixedAt?: number;
 }

@@ -49,9 +49,12 @@ export function CharacterCard({ c, compact }: { c: Character; compact?: boolean 
         <Term tip={GLOSSARY.form} className="chip">
           体：{FORM_INFO[s.form ?? 'humanoid'].label}
         </Term>
-        <Term tip={traitTip(s.trait)} className="chip">
-          特性：{tr.label}
-        </Term>
+        {/* 特性は、下の TRAIT の欄にくわしく出すので、小さいカードのときだけ札に出す */}
+        {compact && (
+          <Term tip={traitTip(s.trait)} className="chip">
+            特性：{tr.label}
+          </Term>
+        )}
         <Term tip={GLOSSARY.weapon} className="chip">
           武器：{WEAPON_LABEL[s.parts.weapon]}
         </Term>

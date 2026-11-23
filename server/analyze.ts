@@ -5,7 +5,7 @@
 
 import type { CharacterSpec } from '../src/game/types';
 import { sanitizeSpec, SPEC_JSON_SCHEMA } from '../src/game/spec';
-import { specHardKanji } from '../src/game/kanji';
+import { hardKanji, specHardKanji } from '../src/game/kanji';
 
 // 指示を大きく変えたら上げる（同じ写真でも、前の指示で作った設計図を返さないため）
 const CACHE_VERSION = 'k2';
@@ -72,23 +72,27 @@ async function callOpenAI(image: string, model: string, apiKey: string, rule: st
   const text = avoid.length
     ? `${USER_PROMPT}\n注意：「${avoid.join('」「')}」は小学校で習わない漢字なので、使わないでください（ひらがなかカタカナにするか、やさしい言葉に言いかえる）。`
     : USER_PROMPT;
-  const body: Record<string, unknown> = {
-    model,
-    messages: [
-      { role: 'system', content: `${SYSTEM_PROMPT}
+  return chat(model, apiKey, 'character_spec', SPEC_JSON_SCHEMA, [
+    { role: 'system', content: `${SYSTEM_PROMPT}
 
 ${rule}` },
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text },
-          { type: 'image_url', image_url: { url: image, detail: 'low' } },
-        ],
-      },
-    ],
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text },
+        { type: 'image_url', image_url: { url: image, detail: 'low' } },
+      ],
+    },
+  ]);
+}
+
+async function chat(model: string, apiKey: string, name: string, schema: unknown, messages: unknown[]): Promise<unknown> {
+  const body: Record<string, unknown> = {
+    model,
+    messages,
     response_format: {
       type: 'json_schema',
-      json_schema: { name: 'character_spec', strict: true, schema: SPEC_JSON_SCHEMA },
+      json_schema: { name, strict: true, schema },
     },
   };
   // 新しい世代のモデルは指定の名前が違う（GEMu の llm_params.py と同じ読み替え）
@@ -112,6 +116,95 @@ ${rule}` },
   const content = data?.choices?.[0]?.message?.content;
   if (!content) throw new Error('OpenAI returned empty content');
   return JSON.parse(content);
+}
+
+// ── 文だけの書き直し（写真は送らない） ──
+// 写真から作り直しても、小学校で習わない漢字が残ることがある。そのときは、画面に出る文だけを AI に渡して、
+// その字を使わないように書き直してもらう。強さ・見た目・属性などは変えない。
+// 前に作ったロボ（漢字の決まりを入れる前のもの）を、ガレージで直すときにも使う。
+
+const TEXT_FIELDS = ['motif', 'name', 'title', 'description', 'skill_name', 'skill_description', 'ultimate_name', 'ultimate_description', 'shout'] as const;
+type TextFields = Record<(typeof TEXT_FIELDS)[number], string>;
+const TEXT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: [...TEXT_FIELDS],
+  properties: Object.fromEntries(TEXT_FIELDS.map((k) => [k, { type: 'string' }])),
+};
+
+const FIX_PROMPT = `あなたは、小学6年生が遊ぶゲームの文を、やさしく直す係です。
+ロボの紹介の文の中に、小学校で習わない漢字が入っています。その字を使わないように書き直してください。
+
+決まり：
+- 名指しした字は、ひらがなかカタカナにするか、小学校で習う漢字だけのやさしい言葉に言いかえる。ほかの字も、小学校で習う漢字だけにする。
+- 意味・雰囲気・かっこよさは、できるだけそのまま。直さなくてよいところは、元の文のまま返す。
+- name（ロボの名前）は、習わない漢字が入っていなければ、元のまま返す。
+- 字数：motif 20字まで / name 3〜8字 / title 12字まで / description 60字まで / skill_name・ultimate_name 12字まで / skill_description・ultimate_description 40字まで / shout 20字まで。`;
+
+function textOf(s: CharacterSpec): TextFields {
+  return {
+    motif: s.motif,
+    name: s.name,
+    title: s.title,
+    description: s.description,
+    skill_name: s.skill.name,
+    skill_description: s.skill.description,
+    ultimate_name: s.ultimate.name,
+    ultimate_description: s.ultimate.description,
+    shout: s.ultimate.shout,
+  };
+}
+
+function withText(s: CharacterSpec, raw: any): CharacterSpec {
+  const t = { ...textOf(s) };
+  for (const k of TEXT_FIELDS) if (typeof raw?.[k] === 'string' && raw[k].trim()) t[k] = raw[k];
+  // 名前に習わない字が無ければ、名前は変えない（遊ぶ子が覚えている名前なので）
+  if (!hardKanji(s.name).length) t.name = s.name;
+  return sanitizeSpec({
+    ...s,
+    motif: t.motif,
+    name: t.name,
+    title: t.title,
+    description: t.description,
+    skill: { ...s.skill, name: t.skill_name, description: t.skill_description },
+    ultimate: { ...s.ultimate, name: t.ultimate_name, description: t.ultimate_description, shout: t.shout },
+  });
+}
+
+/**
+ * 画面に出る文から、小学校で習わない漢字を取りのぞく（文だけを AI に書き直してもらう。最大2回）。
+ * いちばん習わない字が少なかったものを返す。直せなければ、元のまま。
+ */
+export async function fixSpecText(spec: CharacterSpec, opt: { apiKey: string; model: string }): Promise<CharacterSpec> {
+  let best = spec;
+  let hard = specHardKanji(spec);
+  const models = opt.model === 'gpt-4.1-mini' ? [opt.model] : [opt.model, 'gpt-4.1-mini'];
+  for (let round = 0; round < 2 && hard.length; round++) {
+    let raw: unknown = null;
+    for (const model of models) {
+      try {
+        raw = await chat(model, opt.apiKey, 'robot_text', TEXT_SCHEMA, [
+          { role: 'system', content: FIX_PROMPT },
+          {
+            role: 'user',
+            content: `習わない漢字：「${hard.join('」「')}」\n直す文（JSON）：\n${JSON.stringify(textOf(best), null, 1)}`,
+          },
+        ]);
+        break;
+      } catch (e) {
+        console.warn(`[fixText] ${model} failed: ${String((e as Error).message).slice(0, 200)}`);
+      }
+    }
+    if (!raw) break;
+    const next = withText(best, raw);
+    const left = specHardKanji(next);
+    if (left.length < hard.length) {
+      best = next;
+      hard = left;
+    }
+  }
+  console.log(`[fixText] ${specHardKanji(spec).join('')} → ${hard.join('') || 'なし'}`);
+  return best;
 }
 
 export async function analyzeImage(image: string, hash: string, opt: AnalyzeOptions): Promise<AnalyzeResult> {
@@ -139,6 +232,8 @@ export async function analyzeImage(image: string, hash: string, opt: AnalyzeOpti
         } catch (e) {
           console.warn(`[analyze] 作り直しに失敗：${String((e as Error).message).slice(0, 200)}`);
         }
+        // それでも残っていたら、文だけを書き直してもらう
+        if (specHardKanji(spec).length) spec = await fixSpecText(spec, { apiKey: opt.apiKey, model }).catch(() => spec);
       }
       await opt.cache.set(cacheKey(hash), spec).catch((e) => console.warn(`[analyze] cache: ${String(e).slice(0, 200)}`));
       return { spec, cached: false, model };

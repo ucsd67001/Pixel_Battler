@@ -8,7 +8,9 @@
 import { useEffect, useState } from 'react';
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import type { Character } from './types';
-import { deleteCharacter, findBySeed, GARAGE_FULL_MSG, GARAGE_LIMIT, loadHangar, saveCharacter } from './storage';
+import { deleteCharacter, findBySeed, GARAGE_FULL_MSG, GARAGE_LIMIT, loadHangar, saveCharacter, updateCharacter } from './storage';
+import { needsTextFix, withFixedText } from './kanji';
+import { sanitizeSpec } from './spec';
 import { firestore, idToken, useUser } from '../lib/firebase';
 
 const CLOUD = !import.meta.env.DEV;
@@ -59,6 +61,41 @@ async function moveLocal(uid: string, have: Set<string>) {
   }
 }
 
+// 前に作ったロボ（漢字の決まりを入れる前のもの）の文から、小学校で習わない漢字を取りのぞく。一体ずつ、一度だけ。
+//   ・クラウド：サーバー（/api/robots/fix）が書き直して、ガレージに入れ直す。一覧は onSnapshot で新しくなる
+//   ・手元（npm run dev）：/api/fix-text で書き直して、このスマホの中に入れ直す
+//   ・本番でログインしていないときは、しない（ログインしてクラウドへ移ったあとで直す）
+const fixing = new Set<string>();
+async function fixTexts(list: Character[], cloud: boolean, changed: () => void) {
+  for (const c of list) {
+    if (!needsTextFix(c) || fixing.has(c.seed)) continue;
+    fixing.add(c.seed);
+    try {
+      if (cloud) {
+        const token = await idToken();
+        if (!token) return;
+        const r = await fetch('/api/robots/fix', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ hash: c.seed }),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      } else {
+        const r = await fetch('/api/fix-text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ spec: c.spec }),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        updateCharacter(withFixedText(c, sanitizeSpec((await r.json()).spec)));
+        changed();
+      }
+    } catch (e) {
+      console.warn('[garage] fix', e); // つながらなければ、次にひらいたときに、また試す
+    }
+  }
+}
+
 export interface Garage {
   list: Character[];
   ready: boolean; // 一覧を読み終えたか
@@ -89,6 +126,7 @@ export function useGarage(): Garage {
       (s) => {
         const list = s.docs.map((d) => d.data() as Character);
         setCloud(list);
+        fixTexts(list, true, () => undefined);
         if (first) {
           first = false;
           if (loadHangar().length)
@@ -108,6 +146,11 @@ export function useGarage(): Garage {
 
   const isCloud = !!uid && !failed;
   const list = isCloud ? (cloud ?? []) : local;
+
+  // 手元では、このスマホの中のロボの文を直す
+  useEffect(() => {
+    if (import.meta.env.DEV && !isCloud) fixTexts(loadHangar(), false, () => setLocal(loadHangar()));
+  }, [isCloud]);
   const ready = user !== undefined && (!isCloud || cloud !== null);
 
   const add = async (c: Character): Promise<Character> => {
