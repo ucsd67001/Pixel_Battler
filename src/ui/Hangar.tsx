@@ -1,6 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import type { Character } from '../game/types';
-import { GARAGE_LIMIT } from '../game/storage';
 import { useGarage } from '../game/garage';
 import { ELEMENT_INFO } from '../game/data';
 import { CharacterCard } from './CharacterCard';
@@ -40,7 +39,7 @@ export function Hangar({ onFight, onBack }: { onFight: (c: Character) => void; o
         </button>
         <span className="bar-title">GARAGE</span>
         <span className="bar-right garage-count">
-          {list.length} / {GARAGE_LIMIT}体
+          {list.length} / {garage.limit}体
         </span>
       </header>
       <div className="garage-note">

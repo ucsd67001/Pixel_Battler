@@ -10,6 +10,8 @@ import { sanitizeSpec } from '../src/game/spec';
 import type { Character, CharacterSpec } from '../src/game/types';
 
 export const GARAGE_LIMIT = 30;
+export const FAMILY_GARAGE_LIMIT = 100; // 家族（ALLOWED_EMAILS）は100体まで（2026-11-23 から）
+export const garageLimit = (family: boolean) => (family ? FAMILY_GARAGE_LIMIT : GARAGE_LIMIT);
 const HASH = /^[a-f0-9]{64}$/;
 const THUMB = /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/;
 const THUMB_MAX = 120_000; // 縮小画像（160ピクセル）はふつう 10KB ほど

@@ -1,6 +1,6 @@
 // ガレージ（作ったロボの置き場）。どの画面もここから読む。
 //   ・ログインしているとき：クラウド（Firestore の users/{uid}/robots/{写真の印}）。ほかのスマホでも同じガレージ。
-//     入れるのはサーバー（/api/robots。30体まで・数字はサーバーが計算する）。見る・消すのは画面から（本人だけ）
+//     入れるのはサーバー（/api/robots。30体まで、家族は100体まで・数字はサーバーが計算する）。見る・消すのは画面から（本人だけ）
 //   ・ログインしていないとき：このスマホの中（storage.ts）
 //   ・ログインしたとき、このスマホの中にあるロボを、一度だけクラウドへ移す（移せたものは、このスマホから消す）
 //   ・手元（npm run dev）では、いつもこのスマホの中に入れる（/api/robots が無いため）
@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react';
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import type { Character } from './types';
-import { deleteCharacter, findBySeed, GARAGE_FULL_MSG, GARAGE_LIMIT, loadHangar, saveCharacter, updateCharacter } from './storage';
+import { deleteCharacter, findBySeed, garageFullMsg, GARAGE_LIMIT, loadHangar, saveCharacter, updateCharacter } from './storage';
 import { needsTextFix, withFixedText } from './kanji';
 import { sanitizeSpec } from './spec';
 import { firestore, idToken, useUser } from '../lib/firebase';
@@ -16,9 +16,27 @@ import { firestore, idToken, useUser } from '../lib/firebase';
 const CLOUD = !import.meta.env.DEV;
 
 export class GarageFullError extends Error {
-  constructor() {
-    super(GARAGE_FULL_MSG);
+  constructor(limit: number = GARAGE_LIMIT) {
+    super(garageFullMsg(limit));
   }
+}
+
+// クラウドのガレージに何体まで入るか（家族は100体、ほかは30体）。サーバーに一度だけ聞く
+const limits = new Map<string, Promise<number>>();
+function cloudLimit(uid: string): Promise<number> {
+  let p = limits.get(uid);
+  if (!p) {
+    p = (async () => {
+      const token = await idToken();
+      if (!token) throw new Error('login required');
+      const r = await fetch('/api/garage', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return Number((await r.json()).limit) || GARAGE_LIMIT;
+    })();
+    p.catch(() => limits.delete(uid)); // 聞けなかったら、次にまた聞く
+    limits.set(uid, p);
+  }
+  return p;
 }
 
 // サーバーに、ロボをクラウドのガレージへ入れてもらう。返ってくるのは、サーバーが組み立て直したロボ
@@ -101,6 +119,7 @@ export interface Garage {
   ready: boolean; // 一覧を読み終えたか
   cloud: boolean; // クラウドのガレージを使っているか
   left: number; // クラウドがいっぱいで、このスマホに残っているロボの数
+  limit: number; // 何体まで入るか（クラウドは、家族だけ100体。ほかは30体）
   full: boolean;
   find(seed: string): Character | undefined;
   add(c: Character): Promise<Character>;
@@ -147,6 +166,21 @@ export function useGarage(): Garage {
   const isCloud = !!uid && !failed;
   const list = isCloud ? (cloud ?? []) : local;
 
+  // クラウドのガレージの上限（聞き終わるまでは、ふつうの30体として数える）
+  const [cloudMax, setCloudMax] = useState(GARAGE_LIMIT);
+  useEffect(() => {
+    setCloudMax(GARAGE_LIMIT);
+    if (!uid) return;
+    let off = false;
+    cloudLimit(uid)
+      .then((n) => !off && setCloudMax(n))
+      .catch((e) => console.warn('[garage] limit', e));
+    return () => {
+      off = true;
+    };
+  }, [uid]);
+  const limit = isCloud ? cloudMax : GARAGE_LIMIT;
+
   // 手元では、このスマホの中のロボの文を直す
   useEffect(() => {
     if (import.meta.env.DEV && !isCloud) fixTexts(loadHangar(), false, () => setLocal(loadHangar()));
@@ -157,7 +191,7 @@ export function useGarage(): Garage {
     if (isCloud) {
       try {
         const r = await postRobot(c);
-        if (r === 'full') throw new GarageFullError();
+        if (r === 'full') throw new GarageFullError(limit);
         return r;
       } catch (e) {
         if (e instanceof GarageFullError) throw e;
@@ -192,7 +226,8 @@ export function useGarage(): Garage {
     ready,
     cloud: isCloud,
     left: isCloud ? left : 0,
-    full: list.length >= GARAGE_LIMIT,
+    limit,
+    full: list.length >= limit,
     find: (seed) => list.find((c) => c.seed === seed),
     add,
     remove,

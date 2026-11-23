@@ -5,7 +5,9 @@ import type { Character } from './types';
 
 const KEY = 'snapgear.hangar.v1';
 export const GARAGE_LIMIT = 30; // ガレージに入れられるロボの数（クラウドも、このスマホも。server/garage.ts と同じ）
-export const GARAGE_FULL_MSG = `ガレージが いっぱいです（${GARAGE_LIMIT}体まで）。ガレージで どれかを消してから、作ってください。`;
+// クラウドのガレージは、家族だけ100体まで（上限はサーバーが教える。server/garage.ts）
+export const garageFullMsg = (limit: number = GARAGE_LIMIT) =>
+  `ガレージが いっぱいです（${limit}体まで）。ガレージで どれかを消してから、作ってください。`;
 
 export function loadHangar(): Character[] {
   try {

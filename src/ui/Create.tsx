@@ -5,7 +5,7 @@ import { AccessError, analyze, checkHealth, type Health } from '../lib/api';
 import { login, logout, useUser } from '../lib/firebase';
 import { localSpec } from '../game/fallback';
 import { buildCharacter } from '../game/stats';
-import { GARAGE_FULL_MSG } from '../game/storage';
+import { garageFullMsg } from '../game/storage';
 import { GarageFullError, useGarage } from '../game/garage';
 import { CharacterCard } from './CharacterCard';
 import { Showcase } from './StageView';
@@ -73,7 +73,7 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
     if (ch) {
       n = 'この写真からは、前にも同じロボが生まれています。';
     } else if (garage.full) {
-      setError(GARAGE_FULL_MSG);
+      setError(garageFullMsg(garage.limit));
       setStep('pick');
       return;
     } else {
@@ -174,7 +174,7 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
           />
         </div>
         )}
-        {garage.full && !error && <div className="note">{GARAGE_FULL_MSG}</div>}
+        {garage.full && !error && <div className="note">{garageFullMsg(garage.limit)}</div>}
         {error && <div className="error">{error}</div>}
       </div>
     );

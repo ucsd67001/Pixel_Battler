@@ -29,7 +29,7 @@ service cloud.firestore {
         allow create: if signedIn() && request.resource.data.by == request.auth.uid;
       }
     }
-    // ガレージ（作ったロボ）：見る・消すのは本人だけ。入れるのはサーバーだけ（30体まで・数字はサーバーが計算する）
+    // ガレージ（作ったロボ）：見る・消すのは本人だけ。入れるのはサーバーだけ（30体まで、家族は100体まで・数字はサーバーが計算する）
     match /users/{uid}/robots/{robot} {
       allow read, delete: if signedIn() && uid == request.auth.uid;
     }

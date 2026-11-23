@@ -1,6 +1,6 @@
 // Firebase の Cloud Functions：写真をAIに読ませる窓口（/api/health と /api/analyze）と、
-// ロボをクラウドのガレージに入れる窓口（/api/robots。一人30体まで。一覧と消すのは、画面が Firestore を直接使う）、
-// ガレージのロボの文から習わない漢字を取りのぞく窓口（/api/robots/fix）。
+// ロボをクラウドのガレージに入れる窓口（/api/robots。一人30体まで、家族は100体まで。一覧と消すのは、画面が Firestore を直接使う）、
+// その人のガレージの上限を教える窓口（/api/garage）、ガレージのロボの文から習わない漢字を取りのぞく窓口（/api/robots/fix）。
 // Hosting の書き換え（firebase.json）で、同じドメインの /api/** がここに来る。
 // 写真から作れるのは、Google でログインした人だれでも（2026-11-22 から。それまでは家族だけ）。
 // 回数の上限：家族（ALLOWED_EMAILS）は一人一日30回、家族以外は一人一日10回、家族以外の全員を合わせて一日200回。
@@ -12,7 +12,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { analyzeImage, cacheKey, fixSpecText, type SpecCache } from '../../server/analyze';
-import { GARAGE_LIMIT, makeRobot, readRobotInput } from '../../server/garage';
+import { garageLimit, makeRobot, readRobotInput } from '../../server/garage';
 import { needsTextFix, specHardKanji, withFixedText } from '../../src/game/kanji';
 import { sanitizeSpec } from '../../src/game/spec';
 import type { Character, CharacterSpec } from '../../src/game/types';
@@ -31,9 +31,9 @@ const db = getFirestore();
 db.settings({ ignoreUndefinedProperties: true }); // 写真の無いロボ（thumb が無い）も、そのまま入れる
 
 const robots = (uid: string) => db.collection('users').doc(uid).collection('robots');
-// ガレージに何体いるか（30体を超えて数えない）
-async function garageCount(uid: string) {
-  return (await robots(uid).select().limit(GARAGE_LIMIT).get()).size;
+// ガレージに何体いるか（上限を超えて数えない）
+async function garageCount(uid: string, limit: number) {
+  return (await robots(uid).select().limit(limit).get()).size;
 }
 
 const cache: SpecCache = {
@@ -102,7 +102,8 @@ export const api = onRequest(
     const isAnalyze = req.path.endsWith('/analyze');
     const isRobots = req.path.endsWith('/robots');
     const isFix = req.path.endsWith('/robots/fix');
-    if (!isAnalyze && !isRobots && !isFix) {
+    const isGarage = req.path.endsWith('/garage');
+    if (!isAnalyze && !isRobots && !isFix && !isGarage) {
       res.status(404).json({ error: 'not found' });
       return;
     }
@@ -119,6 +120,13 @@ export const api = onRequest(
       return;
     }
     const family = isFamily(user.email);
+    const limit = garageLimit(family);
+
+    // ── その人のガレージに何体まで入るか（画面の「◯ / ◯体」と、いっぱいかどうかのため） ──
+    if (isGarage) {
+      res.json({ limit });
+      return;
+    }
 
     // ── ガレージのロボの文から、小学校で習わない漢字を取りのぞく（一体につき一度だけ。強さ・見た目は変えない） ──
     // 漢字の決まりを入れる前（2026-11-22 の昼）に作ったロボのため。回数の上限には数えない
@@ -168,17 +176,17 @@ export const api = onRequest(
         }
         const cached = (await cache.get(cacheKey(inp.hash)).catch(() => null)) as CharacterSpec | null;
         const ref = robots(user.uid).doc(inp.hash);
-        // 同じ写真のロボがもういれば、それを返す。いなければ、30体より少ないときだけ入れる
+        // 同じ写真のロボがもういれば、それを返す。いなければ、上限より少ないときだけ入れる
         const out = await db.runTransaction(async (tx) => {
           const cur = await tx.get(ref);
           if (cur.exists) return cur.data();
-          const n = (await tx.get(robots(user.uid).select().limit(GARAGE_LIMIT))).size;
-          if (n >= GARAGE_LIMIT) return 'full' as const;
+          const n = (await tx.get(robots(user.uid).select().limit(limit))).size;
+          if (n >= limit) return 'full' as const;
           const robot = makeRobot(inp, cached);
           tx.set(ref, robot);
           return robot;
         });
-        if (out === 'full') res.status(409).json({ error: 'garage full', limit: GARAGE_LIMIT });
+        if (out === 'full') res.status(409).json({ error: 'garage full', limit });
         else res.json({ robot: out });
       } catch (e) {
         res.status(500).json({ error: String((e as Error).message).slice(0, 200) });
@@ -193,8 +201,8 @@ export const api = onRequest(
       // 取っておいたものがあれば、回数に数えずに返す
       const hit = /^[a-f0-9]{64}$/.test(hash) ? await cache.get(cacheKey(hash)).catch(() => null) : null;
       // ガレージがいっぱいなら、AI に読ませる前に止める（作っても入れられないため）
-      if (!hit && (await garageCount(user.uid)) >= GARAGE_LIMIT) {
-        res.status(409).json({ error: 'garage full', limit: GARAGE_LIMIT });
+      if (!hit && (await garageCount(user.uid, limit)) >= limit) {
+        res.status(409).json({ error: 'garage full', limit });
         return;
       }
       const count = hit ? 'ok' : await countUp(user.uid, family);
