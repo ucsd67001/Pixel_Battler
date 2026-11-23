@@ -49,6 +49,7 @@ export interface Hit {
   guarded: boolean;
   hpAfter: number;
   guts: boolean;
+  miss?: boolean; // 見切りで、かわした（ダメージなし）
 }
 
 export interface ActionResult {
@@ -174,7 +175,8 @@ function dealDamage(st: BattleState, attacker: Side, mult: number, rng: Rng, opt
   const A = st.f[attacker];
   const t = foe(attacker);
   const D = st.f[t];
-  const atk = A.c.stats.atk * buffMult(A, 'atk');
+  let atk = A.c.stats.atk * buffMult(A, 'atk');
+  if (A.c.spec.trait === 'grit' && A.hp < A.c.stats.hp * 0.3) atk *= 1.4; // 底力
   let def = D.c.stats.def * buffMult(D, 'def');
   if (D.c.spec.trait === 'ironwall' && D.hp < D.c.stats.hp / 2) def *= 1.6;
   if (A.c.spec.trait === 'pierce') def *= 0.75;
@@ -183,6 +185,10 @@ function dealDamage(st: BattleState, attacker: Side, mult: number, rng: Rng, opt
   if (A.c.spec.bonus && (opts.skill || opts.ult)) m *= BONUS_SKILL; // 特別な写真のロボは、技が少し強い
   if (A.c.spec.trait === 'first' && !A.firstUsed) m *= 1.5;
   const eff = elementMultiplier(A.c.spec.element, D.c.spec.element);
+  // 見切り：ときどき、ひらりとかわす（ダメージも、必殺ゲージも無し）
+  if (D.c.spec.trait === 'evade' && rng() < 0.12) {
+    return { target: t, amount: 0, crit: false, eff, guarded: false, hpAfter: D.hp, guts: false, miss: true };
+  }
   const crit = rng() < (A.c.spec.trait === 'lucky' ? 0.3 : 0.08);
   let dmg = atk * m * 1.35 * (300 / (300 + def)) * eff * (crit ? 1.5 : 1) * (0.92 + rng() * 0.16);
   const guarded = D.guarding && !opts.ignoreGuard;

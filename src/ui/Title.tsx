@@ -3,7 +3,7 @@ import { useGarage } from '../game/garage';
 import { CPU_CHARACTER } from '../game/cpu';
 import { checkHealth, type Health } from '../lib/api';
 import { Showcase } from './StageView';
-import { useUser } from '../lib/firebase';
+import { login, logout, useUser } from '../lib/firebase';
 import { isLocalRoom, openRoomLink, RoomSession, type RoomState } from '../net/room';
 
 // タイトルで、ふたりで対戦の部屋にだれがいるかを見る（ログインしている人だけ）
@@ -45,6 +45,7 @@ export function Title({
   onPick: () => void; // コンピュータと対戦（戦うロボを選ぶ画面へ）
   onRoom: () => void;
 }) {
+  const user = useUser();
   const peek = useRoomPeek();
   const waiting = peek?.players.length === 1;
   const hangar = useGarage().list;
@@ -53,6 +54,11 @@ export function Title({
     checkHealth().then(setAi);
   }, []);
   const latest = hangar[0];
+  // 遊ぶのは、ログインしてから（2026-11-23 から。タイトルだけはログインなしで見られる）。
+  // 手元（npm run dev）はログインのしくみが無いので、そのまま遊べる
+  const needLogin = !!ai?.auth && user === null;
+  const checking = ai === null || (!!ai.auth && user === undefined);
+  const [loginError, setLoginError] = useState('');
   return (
     <div className="screen title-screen">
       <Showcase spec={(latest ?? CPU_CHARACTER).spec} className="stage stage-bg" />
@@ -62,6 +68,30 @@ export function Title({
           <span className="logo-ja">ピクセル・バトラー</span>
           <span className="logo-sub">写真から、相棒を組み上げろ。</span>
         </div>
+        {checking ? (
+          <div className="menu">
+            <div className="status-line">…</div>
+          </div>
+        ) : needLogin ? (
+          <div className="menu">
+            <button
+              className="btn primary big"
+              onClick={() => {
+                setLoginError('');
+                login().catch((e) => {
+                  const code = String((e as { code?: string }).code ?? '');
+                  // 自分でログインの窓を閉じたときは、失敗として出さない
+                  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return;
+                  setLoginError(`ログインできませんでした（${(e as Error).message}）`);
+                });
+              }}
+            >
+              Google でログイン
+            </button>
+            <div className="login-note">Google でログインすると、遊べます。</div>
+            {loginError && <div className="error">{loginError}</div>}
+          </div>
+        ) : (
         <div className="menu">
           <button className="btn primary big" onClick={onCreate}>
             写真から作る
@@ -80,7 +110,13 @@ export function Title({
               ガレージ（{hangar.length}体）
             </button>
           )}
+          {user && (
+            <button className="btn ghost small" onClick={() => logout()}>
+              {user.displayName ?? user.email} ・ ログアウト
+            </button>
+          )}
         </div>
+        )}
         <div className="status-line">
           {ai === null ? '…' : ai.ai ? `AIの読み取り：オン（${ai.model}）` : 'AIの読み取り：オフ（写真の色から作ります）'}
         </div>

@@ -68,7 +68,7 @@ export function elementTip(e: Element): Tip {
   if (strong.length) parts.push(`${strong.map(name).join('')}に強い（ダメージ1.3倍）。`);
   if (weak.length) parts.push(`${weak.map(name).join('')}に弱い（ダメージ0.77倍）。`);
   if (e === 'light' || e === 'dark') parts.push('光と夜は、おたがいに強い。');
-  else parts.push('火は森に、森は水に、水は火に強い。');
+  else parts.push('水は火に、火は風に、風は地に、地は水に強い。');
   return { title: '属性', body: parts.join('') };
 }
 

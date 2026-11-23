@@ -221,6 +221,12 @@ export function Battle({
   };
 
   const applyHit = (h: Hit, big = false) => {
+    if (h.miss) {
+      popup(h.target, 'ミス', 'info');
+      popup(h.target, '見切った！', 'good', 40);
+      stage.current?.dodge(h.target);
+      return;
+    }
     patch(h.target, { hp: h.hpAfter });
     popup(h.target, String(h.amount), h.crit ? 'crit' : 'dmg');
     if (h.guts) popup(h.target, 'ど根性！ HP1でふみとどまった', 'good', 40);

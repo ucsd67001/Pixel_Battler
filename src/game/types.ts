@@ -1,7 +1,9 @@
 // キャラの設計図（AIが写真から決める部分）と、ゲームで使う形
 
 export const FORMS = ['humanoid', 'beast', 'floater'] as const;
-export const ELEMENTS = ['blaze', 'tide', 'verdant', 'light', 'dark'] as const;
+// 属性（2026-11-23 から6種類）：火・水・地・風の4すくみと、光・夜。
+// ⚠️ verdant は、もとは「森」。いまは「地」として使う（前に作ったロボの設計図を、書きかえずにそのまま読めるように）
+export const ELEMENTS = ['blaze', 'tide', 'verdant', 'gale', 'light', 'dark'] as const;
 export const HEADS = ['vfin', 'horns', 'mono', 'crest', 'ears', 'crown'] as const;
 export const BODIES = ['standard', 'slim', 'heavy'] as const;
 export const ARMS = ['standard', 'heavy', 'blade'] as const;
@@ -12,7 +14,8 @@ export const SKILL_KINDS = [
   'strike', 'barrage', 'drain', 'breaker', 'heal', 'powerup', 'fortify', 'hex', 'counter',
 ] as const;
 export const ULT_STYLES = ['beam', 'slash', 'meteor', 'burst', 'rush'] as const;
-export const TRAITS = ['first', 'guts', 'pierce', 'regen', 'focus', 'ironwall', 'fighter', 'lucky'] as const;
+// 特性（2026-11-23 から10種類。grit＝底力・evade＝見切り を足した）
+export const TRAITS = ['first', 'guts', 'pierce', 'regen', 'focus', 'ironwall', 'fighter', 'lucky', 'grit', 'evade'] as const;
 
 export type Form = (typeof FORMS)[number];
 export type Element = (typeof ELEMENTS)[number];

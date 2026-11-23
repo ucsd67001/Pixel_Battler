@@ -646,6 +646,25 @@ export class Stage {
     })();
   }
 
+  /** 見切り：ひらりと後ろへ跳んで、かわす */
+  dodge(side: Side) {
+    const r = this.robots[side];
+    if (!r || this.down[side]) return;
+    sfx('swing');
+    const back = side === 0 ? -1 : 1;
+    const home = this.homeX[side];
+    const y0 = r.root.position.y;
+    this.fx.burst(this.feet(side), '#d8f4ff', { count: 10, speed: 1.6, up: 0.6, size: 0.2, life: 0.35 });
+    (async () => {
+      await this.tw.add(0.12, (k) => {
+        r.root.position.x = home + back * 0.8 * k;
+        r.root.position.y = y0 + Math.sin(k * Math.PI) * 0.4;
+      });
+      r.root.position.y = y0;
+      await this.tw.add(0.3, (k) => (r.root.position.x = lerp(home + back * 0.8, home, k)));
+    })();
+  }
+
   async ko(side: Side) {
     const r = this.robots[side];
     if (!r) return;

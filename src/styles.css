@@ -196,6 +196,16 @@ button {
   gap: 12px;
   width: min(360px, 100%);
 }
+.login-note {
+  font-size: 13px;
+  color: #b9cbea;
+  text-align: center;
+}
+.menu .error {
+  margin: 0;
+  font-size: 13px;
+  text-align: center;
+}
 .status-line {
   font-size: 12px;
   color: var(--muted);

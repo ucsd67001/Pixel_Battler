@@ -31,7 +31,7 @@ function elementFromColor(hex: string): Element {
   if (s < 0.18) return l > 0.6 ? 'light' : 'dark';
   if (h < 40 || h >= 330) return 'blaze';
   if (h < 70) return 'light';
-  if (h < 170) return 'verdant';
+  if (h < 170) return 'verdant'; // 緑は「地」（もとの「森」）。色から作るロボは、風にはならない
   if (h < 260) return 'tide';
   return 'dark';
 }
@@ -77,6 +77,7 @@ export function localSpec(seed: string, colors: string[]): CharacterSpec {
       description: '',
       shout: 'これで決める！',
     },
-    trait: choose(TRAITS),
+    // 特性は、もとの8つから選ぶ（2026-11-23 に足した二つを入れると、同じ写真から別の特性になってしまうため）
+    trait: choose(TRAITS.slice(0, 8)),
   };
 }

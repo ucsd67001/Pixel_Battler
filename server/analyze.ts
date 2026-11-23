@@ -55,7 +55,7 @@ const SYSTEM_PROMPT = `あなたは、写真から「オリジナルのSDロボ�
 
 選択肢の意味：
 - form：humanoid＝人型（立ち姿が似合うもの：道具・建物・服・人工物） / beast＝四つ足の獣型（動物・乗り物・家具など、横に長いもの・速いもの・力強いもの） / floater＝浮遊型（丸いもの・軽いもの・光るもの・食べ物・空や宇宙のもの）。獣型の weapon は、角（sword・lance）・背中の砲（rifle）・尾の槌（hammer）・肩の盾（shield）・前足の爪（claw）・牙（none）になる。浮遊型は、体のまわりに浮かぶ両手で武器を持つ
-- element：blaze＝火・熱・赤・情熱 / tide＝水・氷・海・青・冷静 / verdant＝植物・自然・動物・緑 / light＝光・金・白・電気・神聖 / dark＝夜・影・黒・神秘・冷たい機械
+- element：blaze＝火・熱・赤・情熱 / tide＝水・氷・海・青・冷静 / verdant＝地（大地・土・岩・山・木や森・植物・金属・茶色や緑。どっしり、力強い） / gale＝風（空・鳥・羽・雲・虫・乗り物・速いもの・軽いもの・すずしい色） / light＝光・金・白・電気・神聖 / dark＝夜・影・黒・神秘・冷たい機械
 - parts.head：vfin＝V字の角（主人公らしい） / horns＝二本の角（猛々しい） / mono＝一つ目のバイザー（無機質） / crest＝とさかのフィン（騎士） / ears＝耳型センサー（動物・かわいい） / crown＝王冠（高貴）
 - parts.body：standard / slim（すばやい） / heavy（重装）
 - parts.arms：standard / heavy（大きな手甲） / blade（腕に刃）
@@ -64,7 +64,7 @@ const SYSTEM_PROMPT = `あなたは、写真から「オリジナルのSDロボ�
 - parts.weapon：none（拳） / sword（剣） / lance（槍） / rifle（銃） / hammer（槌） / shield（盾と拳） / claw（爪）
 - skill.kind：strike（強烈な一撃） / barrage（三連撃） / drain（攻撃して吸収） / breaker（守りを砕く） / heal（回復） / powerup（攻撃強化） / fortify（防御強化） / hex（相手を弱らせる） / counter（反撃の構え）
 - ultimate.style：beam（極太のビーム） / slash（一閃） / meteor（流星を降らせる） / burst（大爆発） / rush（乱舞）
-- trait：first（先制） / guts（不屈：一度だけHP1で耐える） / pierce（貫通） / regen（再生） / focus（集中：SPの回復が2倍） / ironwall（堅牢：ピンチで防御アップ） / fighter（闘志：必殺ゲージが早くたまる） / lucky（強運：会心が出やすい）`;
+- trait：first（先制） / guts（不屈：一度だけHP1で耐える） / pierce（貫通） / regen（再生） / focus（集中：SPの回復が2倍） / ironwall（堅牢：ピンチで防御アップ） / fighter（闘志：必殺ゲージが早くたまる） / lucky（強運：会心が出やすい） / grit（底力：ピンチでこうげきアップ） / evade（見切り：ときどき、こうげきをかわす）`;
 
 const USER_PROMPT = 'この写真から、ロボを一体設計してください。';
 

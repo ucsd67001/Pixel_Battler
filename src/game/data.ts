@@ -9,22 +9,26 @@ export const FORM_INFO: Record<Form, { label: string; en: string }> = {
 export const ELEMENT_INFO: Record<Element, { label: string; en: string; color: string }> = {
   blaze: { label: '火', en: 'BLAZE', color: '#ff5a2a' },
   tide: { label: '水', en: 'TIDE', color: '#2aa8ff' },
-  verdant: { label: '森', en: 'VERDANT', color: '#3ddc84' },
+  verdant: { label: '地', en: 'TERRA', color: '#c27a36' }, // もとは「森」（2026-11-23 に地へ）
+  gale: { label: '風', en: 'GALE', color: '#4fe3b0' },
   light: { label: '光', en: 'LUMEN', color: '#ffd84a' },
   dark: { label: '夜', en: 'UMBRA', color: '#a35cff' },
 };
 
-// 火→森→水→火 の三すくみ。光と夜はお互いに強い。
+// 水→火→風→地→水 の4すくみ（矢印の先に強い）。光と夜はお互いに強い。
+//   水は火を消す・風は火をあおって大きくしてしまう・風は岩や土をけずる・土は水をせき止めて、すいこむ
 const STRONG: Record<Element, Element[]> = {
-  blaze: ['verdant'],
-  verdant: ['tide'],
   tide: ['blaze'],
+  blaze: ['gale'],
+  gale: ['verdant'],
+  verdant: ['tide'],
   light: ['dark'],
   dark: ['light'],
 };
 const WEAK: Record<Element, Element[]> = {
   blaze: ['tide'],
-  verdant: ['blaze'],
+  gale: ['blaze'],
+  verdant: ['gale'],
   tide: ['verdant'],
   light: [],
   dark: [],
@@ -83,6 +87,8 @@ export const TRAIT_TABLE: Record<Trait, { label: string; en: string; effect: str
   ironwall: { label: '鉄の守り', en: 'IRONWALL', effect: 'HPが半分より少なくなると、ぼうぎょが60%上がる' },
   fighter: { label: '熱血', en: 'FIGHTER', effect: '必殺ゲージが1.6倍の速さでたまる' },
   lucky: { label: '強運', en: 'LUCKY', effect: '会心の一打（大ダメージ）が出る確率が30%になる' },
+  grit: { label: '底力', en: 'GRIT', effect: 'HPが3割より少なくなると、こうげきが40%上がる' },
+  evade: { label: '見切り', en: 'EVADE', effect: '12%の確率で、相手のこうげきをかわす（ダメージなし）' },
 };
 
 export const ULT_TABLE: Record<UltStyle, { label: string; hits: number }> = {
