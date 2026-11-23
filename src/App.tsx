@@ -13,6 +13,7 @@ type Screen =
   | { name: 'title' }
   | { name: 'create' }
   | { name: 'hangar' }
+  | { name: 'pick' } // コンピュータと対戦：戦うロボを選ぶ
   | { name: 'battle'; char: Character; key: number }
   | { name: 'room' }
   | { name: 'netbattle'; char: Character; net: NetBattle; key: number };
@@ -78,7 +79,7 @@ export function App() {
         <Title
           onCreate={() => setScreen({ name: 'create' })}
           onHangar={() => setScreen({ name: 'hangar' })}
-          onFight={fight}
+          onPick={() => setScreen({ name: 'pick' })}
           onRoom={() => setScreen({ name: 'room' })}
         />
       );
@@ -86,6 +87,8 @@ export function App() {
       return <Create onFight={fight} onBack={title} />;
     case 'hangar':
       return <Hangar onFight={fight} onBack={title} />;
+    case 'pick':
+      return <Hangar pick onFight={fight} onBack={title} />;
     case 'battle':
       return (
         <Battle

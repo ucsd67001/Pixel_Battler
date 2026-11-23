@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import type { Character } from '../game/types';
 import { useGarage } from '../game/garage';
 import { CPU_CHARACTER } from '../game/cpu';
 import { checkHealth, type Health } from '../lib/api';
@@ -38,12 +37,12 @@ function roomLabel(s: RoomState | null) {
 export function Title({
   onCreate,
   onHangar,
-  onFight,
+  onPick,
   onRoom,
 }: {
   onCreate: () => void;
   onHangar: () => void;
-  onFight: (c: Character) => void;
+  onPick: () => void; // コンピュータと対戦（戦うロボを選ぶ画面へ）
   onRoom: () => void;
 }) {
   const peek = useRoomPeek();
@@ -68,8 +67,8 @@ export function Title({
             写真から作る
           </button>
           {latest && (
-            <button className="btn big" onClick={() => onFight(latest)}>
-              {latest.spec.name} で戦う
+            <button className="btn big" onClick={onPick}>
+              コンピュータと対戦
             </button>
           )}
           <button className={`btn room-btn${waiting ? ' waiting' : ''}`} onClick={onRoom}>

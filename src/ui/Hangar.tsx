@@ -5,7 +5,16 @@ import { ELEMENT_INFO } from '../game/data';
 import { CharacterCard } from './CharacterCard';
 import { Showcase } from './StageView';
 
-export function Hangar({ onFight, onBack }: { onFight: (c: Character) => void; onBack: () => void }) {
+// ガレージの画面。pick のときは「コンピュータと対戦」の、戦うロボを選ぶ画面として使う（消すボタンは出さない）
+export function Hangar({
+  onFight,
+  onBack,
+  pick = false,
+}: {
+  onFight: (c: Character) => void;
+  onBack: () => void;
+  pick?: boolean;
+}) {
   const garage = useGarage();
   const list = garage.list;
   const [selSeed, setSelSeed] = useState<string | null>(null);
@@ -37,18 +46,22 @@ export function Hangar({ onFight, onBack }: { onFight: (c: Character) => void; o
         <button className="btn ghost small" onClick={onBack}>
           ◀ タイトル
         </button>
-        <span className="bar-title">GARAGE</span>
+        <span className="bar-title">{pick ? 'VS COMPUTER' : 'GARAGE'}</span>
         <span className="bar-right garage-count">
           {list.length} / {garage.limit}体
         </span>
       </header>
-      <div className="garage-note">
-        {garage.cloud
-          ? 'ログインしているので、ロボはクラウドに しまってあります。ほかのスマホでも、同じガレージです。'
-          : 'ロボは、このスマホの中に しまってあります。Google でログインすると、クラウドに うつせます。'}
-        {garage.left > 0 &&
-          ` ガレージが いっぱいで、このスマホの ロボ ${garage.left}体を まだ うつせていません。どれかを消すと、うつります。`}
-      </div>
+      {pick ? (
+        <div className="garage-note">コンピュータと戦うロボを えらんでください。</div>
+      ) : (
+        <div className="garage-note">
+          {garage.cloud
+            ? 'ログインしているので、ロボはクラウドに しまってあります。ほかのスマホでも、同じガレージです。'
+            : 'ロボは、このスマホの中に しまってあります。Google でログインすると、クラウドに うつせます。'}
+          {garage.left > 0 &&
+            ` ガレージが いっぱいで、このスマホの ロボ ${garage.left}体を まだ うつせていません。どれかを消すと、うつります。`}
+        </div>
+      )}
       {err && <div className="error">{err}</div>}
       {!garage.ready ? (
         <div className="empty">ガレージを 読みこんでいます…</div>
@@ -78,11 +91,13 @@ export function Hangar({ onFight, onBack }: { onFight: (c: Character) => void; o
               <CharacterCard c={sel} />
               <div className="actions">
                 <button className="btn primary big" onClick={() => onFight(sel)}>
-                  バトルへ！
+                  {pick ? `${sel.spec.name} で戦う！` : 'バトルへ！'}
                 </button>
-                <button className="btn ghost danger" disabled={busy} onClick={() => remove(sel)}>
-                  ガレージから消す
-                </button>
+                {!pick && (
+                  <button className="btn ghost danger" disabled={busy} onClick={() => remove(sel)}>
+                    ガレージから消す
+                  </button>
+                )}
               </div>
             </div>
           )}
