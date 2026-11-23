@@ -2,6 +2,7 @@
 //   ?showroom&spin    … 回す
 //   ?showroom&pose=guard … ポーズを変える（idle・slash・guard・aim・victory など）
 //   ?showroom&yaw=0.5 … 向き（ラジアン）
+//   ?showroom&cpu     … コンピュータの敵を全員ならべる（&cpu=4,8 で、えらんだ敵だけ）
 
 import type { CharacterSpec } from '../game/types';
 import { CPU_CHARACTERS } from '../game/cpu';
@@ -65,7 +66,11 @@ export function Showroom() {
   const only = q.get('only');
   // ?showroom&vary=1 … 1番のロボを、名前だけ変えて8体（体の比率のちがいを見る）
   const vary = q.get('vary');
-  const list = vary
+  // ?showroom&cpu … コンピュータの敵を全員ならべる（&cpu=4,8 でえらんで）
+  const cpuSel = q.get('cpu');
+  const list = q.has('cpu')
+    ? (cpuSel ? cpuSel.split(',').map((i) => CPU_CHARACTERS[Number(i)]).filter(Boolean) : CPU_CHARACTERS).map((c) => c.spec)
+    : vary
     ? Array.from({ length: 8 }, (_, i) => ({ ...SPECS[Number(vary)], name: `ためし${i}` }))
     : only
       ? only.split(',').map((i) => SPECS[Number(i)]).filter(Boolean)

@@ -4,8 +4,9 @@ import type { Character, CharacterSpec } from './types';
 import { SKILL_TABLE } from './data';
 import { type ActionType, type BattleState, type Rng, type Side, canUse, foe, MAX_GAUGE } from './battle';
 
-// 敵は三体。バトルのたびに、ランダムで一体が出てくる（前と同じ敵は、続けて出にくくする）。
-// 体の形・属性・必殺技の型を、三体でばらばらにしてある。強さはどれもランクA。
+// 敵は九体（2026-11-23 に三体から九体に）。バトルのたびに、ランダムで一体が出てくる（同じ敵は続けて出ない）。
+// 体の形は三体ずつ。属性・スキル・必殺技の型・特性が、なるべくかぶらないようにしてある。強さはどれもランクA。
+// 数字を変えたら npm run sim で、敵ごとの勝率（45〜55% くらい）を確かめる。
 
 function cpu(id: string, spec: CharacterSpec, stats: Character['stats']): Character {
   return {
@@ -73,7 +74,7 @@ const GARUFLARE = cpu(
     },
     trait: 'first',
   },
-  { hp: 1850, sp: 100, atk: 290, def: 175 },
+  { hp: 1850, sp: 100, atk: 282, def: 175 },
 );
 
 // ③ 空中型・光・ライフル・ビーム（回復しながら、遠くから打つ）
@@ -98,10 +99,160 @@ const LUMINAS = cpu(
     },
     trait: 'focus',
   },
-  { hp: 1950, sp: 150, atk: 235, def: 200 },
+  { hp: 2050, sp: 150, atk: 250, def: 205 },
 );
 
-export const CPU_CHARACTERS: Character[] = [VORTEX, GARUFLARE, LUMINAS];
+// ④ 人型・水・ソード・スラッシュ（受けて返す、会心の一太刀）
+const FROSTIA = cpu(
+  'cpu-frostia',
+  {
+    motif: '冬のつらら',
+    name: 'フロスティア',
+    title: '氷の刀使い',
+    description: '冬のつららから生まれた、すらりとしたロボ。こおった刀で、相手のこうげきを受け止めて切り返す。',
+    form: 'humanoid',
+    element: 'tide',
+    bias: { hp: 3, sp: 3, atk: 4, def: 3 },
+    parts: { head: 'vfin', body: 'slim', arms: 'blade', legs: 'standard', back: 'cape', weapon: 'sword' },
+    colors: { primary: '#dff3ff', secondary: '#3a8fd9', accent: '#b8e8ff', eye: '#7ff6ff' },
+    skill: { name: 'アイスミラー', kind: 'counter', description: '氷のかがみで受け止めて、そのまま切り返す' },
+    ultimate: {
+      name: 'ブリザード・スラッシュ',
+      style: 'slash',
+      description: 'ふぶきといっしょに、ひと息で切りぬける',
+      shout: 'こおりつけ、ひと太刀で！',
+    },
+    trait: 'lucky',
+  },
+  { hp: 2050, sp: 120, atk: 270, def: 200 },
+);
+
+// ⑤ 人型・森・ランス・大ばくはつ（力をためて、一気にはじける）
+const TAKELANCER = cpu(
+  'cpu-takelancer',
+  {
+    motif: '竹林',
+    name: 'タケランサー',
+    title: '竹林のやり使い',
+    description: '竹林から生まれた、まっすぐなロボ。竹のようにしなって、何度たおされても起き上がる。',
+    form: 'humanoid',
+    element: 'verdant',
+    bias: { hp: 3, sp: 3, atk: 4, def: 2 },
+    parts: { head: 'crest', body: 'standard', arms: 'standard', legs: 'thruster', back: 'boosters', weapon: 'lance' },
+    colors: { primary: '#4a8a3c', secondary: '#e0d29a', accent: '#2f5e2a', eye: '#8ee05a' },
+    skill: { name: 'グリーンチャージ', kind: 'powerup', description: '竹のように、ぐんぐん力をのばす' },
+    ultimate: {
+      name: 'バンブー・バースト',
+      style: 'burst',
+      description: 'ためた力を、竹林ごと一気にはじけさせる',
+      shout: 'まっすぐ、つきぬけろ！',
+    },
+    trait: 'guts',
+  },
+  { hp: 1900, sp: 115, atk: 250, def: 185 },
+);
+
+// ⑥ けもの型・水・シールド・流星（かたくて、自分で回復する）
+const TURTRON = cpu(
+  'cpu-turtron',
+  {
+    motif: '海がめ',
+    name: 'タートロン',
+    title: '海の守り神',
+    description: '海がめから生まれた、大きなこうらのロボ。ゆっくり歩くが、こうらはどんなこうげきも通さない。',
+    form: 'beast',
+    element: 'tide',
+    bias: { hp: 5, sp: 2, atk: 2, def: 5 },
+    parts: { head: 'mono', body: 'heavy', arms: 'heavy', legs: 'heavy', back: 'cannons', weapon: 'shield' },
+    colors: { primary: '#2f6f6a', secondary: '#9fd8c8', accent: '#e0c060', eye: '#7fffe0' },
+    skill: { name: 'シェルウォール', kind: 'fortify', description: 'こうらをかためて、体を休める' },
+    ultimate: {
+      name: 'アクア・メテオ',
+      style: 'meteor',
+      description: '海の水を空に上げて、流星のように落とす',
+      shout: '海の力を、思い知れ！',
+    },
+    trait: 'regen',
+  },
+  { hp: 2150, sp: 110, atk: 210, def: 230 },
+);
+
+// ⑦ けもの型・森・ソード（角）・スラッシュ（相手を弱らせて、守りをつらぬく）
+const HORNBEAT = cpu(
+  'cpu-hornbeat',
+  {
+    motif: 'カブトムシ',
+    name: 'ホーンビート',
+    title: '森の王者',
+    description: 'カブトムシから生まれた、大きな角のロボ。夜の森を飛び回り、角でどんな守りもつらぬく。',
+    form: 'beast',
+    element: 'verdant',
+    bias: { hp: 3, sp: 2, atk: 5, def: 3 },
+    parts: { head: 'horns', body: 'standard', arms: 'blade', legs: 'standard', back: 'wings', weapon: 'sword' },
+    colors: { primary: '#2a1f18', secondary: '#7a4f2a', accent: '#d9a53a', eye: '#ff5a3a' },
+    skill: { name: 'ジャングルミスト', kind: 'hex', description: '森のきりで相手をつつみ、力をうばう' },
+    ultimate: {
+      name: 'ホーン・スラッシュ',
+      style: 'slash',
+      description: '大きな角をふり上げて、まっすぐ切り上げる',
+      shout: '森の王者の力を見よ！',
+    },
+    trait: 'pierce',
+  },
+  { hp: 1900, sp: 105, atk: 280, def: 185 },
+);
+
+// ⑧ 空中型・夜・クロー・ビーム（回復しながら、ねばり強く戦う）
+const PUMPKID = cpu(
+  'cpu-pumpkid',
+  {
+    motif: 'ハロウィンのかぼちゃ',
+    name: 'パンプキッド',
+    title: '夜のいたずら王',
+    description: 'ハロウィンのかぼちゃから生まれた、空にうかぶロボ。ろうそくの火で、きずをなおしながら戦う。',
+    form: 'floater',
+    element: 'dark',
+    bias: { hp: 4, sp: 4, atk: 2, def: 3 },
+    parts: { head: 'ears', body: 'standard', arms: 'standard', legs: 'standard', back: 'cape', weapon: 'claw' },
+    colors: { primary: '#ff8a1f', secondary: '#3a2550', accent: '#7a3cff', eye: '#ffd23a' },
+    skill: { name: 'キャンドルライト', kind: 'heal', description: 'ろうそくの火で、きずをなおす' },
+    ultimate: {
+      name: 'ランタン・ビーム',
+      style: 'beam',
+      description: 'かぼちゃの口から、むらさきの光をはき出す',
+      shout: 'いたずらの時間だよ！',
+    },
+    trait: 'fighter',
+  },
+  { hp: 1950, sp: 130, atk: 220, def: 200 },
+);
+
+// ⑨ 空中型・光・ライフル・ラッシュ（先に動いて、大きな一発）
+const HANABEAT = cpu(
+  'cpu-hanabeat',
+  {
+    motif: '夏の花火',
+    name: 'ハナビート',
+    title: '夏祭りの花火師',
+    description: '夏の花火から生まれた、空にうかぶロボ。夜空に大きな花をさかせるように、光の玉を打ち上げる。',
+    form: 'floater',
+    element: 'light',
+    bias: { hp: 3, sp: 3, atk: 4, def: 2 },
+    parts: { head: 'vfin', body: 'slim', arms: 'standard', legs: 'standard', back: 'boosters', weapon: 'rifle' },
+    colors: { primary: '#1c2350', secondary: '#ff4f8b', accent: '#ffd84a', eye: '#ffef7a' },
+    skill: { name: 'ドカンスター', kind: 'strike', description: '大きな光の玉を、一発ドカンと打ちこむ' },
+    ultimate: {
+      name: 'スターマイン・ラッシュ',
+      style: 'rush',
+      description: '色とりどりの花火を、休まず打ち上げる',
+      shout: '夜空に、さけ！',
+    },
+    trait: 'first',
+  },
+  { hp: 1850, sp: 115, atk: 255, def: 175 },
+);
+
+export const CPU_CHARACTERS: Character[] = [VORTEX, GARUFLARE, LUMINAS, FROSTIA, TAKELANCER, TURTRON, HORNBEAT, PUMPKID, HANABEAT];
 /** タイトル画面などで使う、いつもの一体 */
 export const CPU_CHARACTER = VORTEX;
 
