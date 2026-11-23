@@ -40,6 +40,14 @@ export function prefetchRival(): Promise<void> {
   return loading;
 }
 
+/** もらっておいた、みんなのロボを使う（無ければ null）。ストーリーの乱入のため */
+export function takeRival(): Character | null {
+  const c = next;
+  next = null;
+  void prefetchRival();
+  return c;
+}
+
 /** 次のバトルの敵。みんなのロボを使ったら、次の一体をまたもらっておく */
 export function pickEnemy(rng: () => number = Math.random): Character {
   if (rng() < RIVAL_RATE && next) {

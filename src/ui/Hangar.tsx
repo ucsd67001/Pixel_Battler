@@ -12,10 +12,16 @@ export function Hangar({
   onFight,
   onBack,
   pick = false,
+  barTitle,
+  note,
+  backLabel = '◀ タイトル',
 }: {
   onFight: (c: Character) => void;
   onBack: () => void;
   pick?: boolean;
+  barTitle?: string; // 上の帯の文字（ストーリーで使う）
+  note?: string; // 上の説明（ストーリーで使う）
+  backLabel?: string;
 }) {
   const garage = useGarage();
   if (import.meta.env.DEV) (window as any).__garage = garage; // 試すときに経験値を足すため（開発中だけ）
@@ -51,16 +57,16 @@ export function Hangar({
     <div className="screen hangar-screen">
       <header className="bar">
         <button className="btn ghost small" onClick={onBack}>
-          ◀ タイトル
+          {backLabel}
         </button>
-        <span className="bar-title">{pick ? 'VS COMPUTER' : 'GARAGE'}</span>
+        <span className="bar-title">{barTitle ?? (pick ? 'VS COMPUTER' : 'GARAGE')}</span>
         <span className="bar-right garage-count">
           {list.length} / {garage.limit}体
         </span>
       </header>
       {pick ? (
         <div className="garage-note">
-          コンピュータと戦うロボを えらんでください。ほかの人が作ったロボ（だれかのロボ）が、あいてになることも あります。
+          {note ?? 'コンピュータと戦うロボを えらんでください。ほかの人が作ったロボ（だれかのロボ）が、あいてになることも あります。'}
         </div>
       ) : (
         <div className="garage-note">

@@ -12,6 +12,7 @@ import { deleteCharacter, findBySeed, garageFullMsg, GARAGE_LIMIT, loadHangar, s
 import { needsTextFix, withFixedText } from './kanji';
 import { sanitizeSpec } from './spec';
 import { EXP_PER_WIN, growthOf } from './level';
+import { afterWin, canWin, EMPTY_STORY, readStory, type StoryProgress } from './story';
 import { firestore, idToken, useUser } from '../lib/firebase';
 
 const CLOUD = !import.meta.env.DEV;
@@ -121,6 +122,56 @@ export interface WinResult {
   exp: number;
   level: number;
   up: boolean;
+  story: StoryProgress;
+}
+
+// ── ストーリーの進み具合 ──
+//   ・クラウド：Firestore の users/{uid} の story（見るのは本人だけ。書くのはサーバーだけ。/api/robots/win が進める）
+//   ・手元・ログインしていないとき：このスマホの中（localStorage）
+const STORY_KEY = 'pb.story.v1';
+const storyWatchers = new Set<() => void>();
+function loadLocalStory(): StoryProgress {
+  try {
+    return readStory(JSON.parse(localStorage.getItem(STORY_KEY) ?? 'null'));
+  } catch {
+    return EMPTY_STORY;
+  }
+}
+function saveLocalStory(p: StoryProgress) {
+  try {
+    localStorage.setItem(STORY_KEY, JSON.stringify(p));
+  } catch {
+    // 入れられなくても、遊ぶのは続けられる
+  }
+  storyWatchers.forEach((f) => f());
+}
+
+/** ストーリーの進み具合（読みこみ中は null） */
+export function useStory(): StoryProgress | null {
+  const user = useUser();
+  const db = firestore();
+  const uid = CLOUD && db && user ? user.uid : null;
+  const [local, setLocal] = useState(loadLocalStory);
+  const [cloud, setCloud] = useState<StoryProgress | null>(null);
+  useEffect(() => {
+    const f = () => setLocal(loadLocalStory());
+    storyWatchers.add(f);
+    return () => void storyWatchers.delete(f);
+  }, []);
+  useEffect(() => {
+    setCloud(null);
+    if (!uid || !db) return;
+    return onSnapshot(
+      doc(db, 'users', uid),
+      (s) => setCloud(readStory(s.data()?.story)),
+      (e) => {
+        console.warn('[story]', e);
+        setCloud(EMPTY_STORY);
+      },
+    );
+  }, [uid, db]);
+  if (uid) return cloud;
+  return user === undefined && CLOUD ? null : local;
 }
 
 export interface Garage {
@@ -244,14 +295,18 @@ export function useGarage(): Garage {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return (await r.json()) as WinResult; // ガレージの一覧は onSnapshot で新しくなる
     }
-    // 手元・クラウドにつながらないとき：このスマホの中のロボに足す
+    // 手元・ログインしていないとき：このスマホの中のロボと進み具合に足す
     const cur = findBySeed(c.seed);
     if (!cur) throw new Error('not found');
+    const story = loadLocalStory();
     const before = growthOf(cur.exp);
+    if (!canWin(story, chapter, slot)) return { counted: false, exp: before.exp, level: before.level, up: false, story };
     const after = growthOf(before.exp + EXP_PER_WIN);
     updateCharacter({ ...cur, exp: after.exp, level: after.level });
     setLocal(loadHangar());
-    return { counted: true, exp: after.exp, level: after.level, up: after.level > before.level };
+    const next = afterWin(story, chapter, slot);
+    saveLocalStory(next);
+    return { counted: true, exp: after.exp, level: after.level, up: after.level > before.level, story: next };
   };
 
   return {

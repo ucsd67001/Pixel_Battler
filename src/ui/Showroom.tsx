@@ -3,9 +3,11 @@
 //   ?showroom&pose=guard … ポーズを変える（idle・slash・guard・aim・victory など）
 //   ?showroom&yaw=0.5 … 向き（ラジアン）
 //   ?showroom&cpu     … コンピュータの敵を全員ならべる（&cpu=4,8 で、えらんだ敵だけ）
+//   ?showroom&minions=1 … ストーリーの1章の手下4体とボスをならべる（一度にたくさん出すと 3D の数の上限を超えるので、章ごとに見る）
 
 import type { CharacterSpec } from '../game/types';
 import { CPU_CHARACTERS } from '../game/cpu';
+import { MINIONS } from '../game/minions';
 import { StageView } from './StageView';
 import { Battle } from './Battle';
 import { posesOf, proportionsOf, setPose, type PoseName } from '../three/robot';
@@ -68,7 +70,10 @@ export function Showroom() {
   const vary = q.get('vary');
   // ?showroom&cpu … コンピュータの敵を全員ならべる（&cpu=4,8 でえらんで）
   const cpuSel = q.get('cpu');
-  const list = q.has('cpu')
+  const minionCh = Number(q.get('minions')) || 1;
+  const list = q.has('minions')
+    ? [...(MINIONS[minionCh - 1] ?? []), CPU_CHARACTERS[minionCh - 1]].filter(Boolean).map((c) => c.spec)
+    : q.has('cpu')
     ? (cpuSel ? cpuSel.split(',').map((i) => CPU_CHARACTERS[Number(i)]).filter(Boolean) : CPU_CHARACTERS).map((c) => c.spec)
     : vary
     ? Array.from({ length: 8 }, (_, i) => ({ ...SPECS[Number(vary)], name: `ためし${i}` }))

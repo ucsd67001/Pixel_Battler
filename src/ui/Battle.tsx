@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Character } from '../game/types';
 import { chooseAction } from '../game/cpu';
 import { pickEnemy } from '../game/rival';
@@ -74,6 +74,11 @@ function SidePanel({ c, h, side }: { c: Character; h: SideHud; side: Side }) {
           {el.label}
         </Term>
         <b>{c.spec.name}</b>
+        {c.fightLevel && (
+          <Term tip={GLOSSARY.level} mark={false} className="hud-lv">
+            Lv{c.fightLevel}
+          </Term>
+        )}
         <Term tip={GLOSSARY.rank} mark={false}>
           <span className={`rank mini rank-${c.rank}`}>{c.rank}</span>
         </Term>
@@ -128,15 +133,24 @@ export function Battle({
   onExit,
   onRematch,
   net,
+  enemy: fixedEnemy,
+  intro,
+  resultPanel,
 }: {
   player: Character;
   onExit: () => void;
   onRematch: () => void;
   /** ふたりで対戦のとき：あいてとのやりとり（無ければ、コンピュータと戦う） */
   net?: NetBattle;
+  /** ストーリーのとき：決まった敵（無ければ、コンピュータと対戦の敵を選ぶ） */
+  enemy?: Character;
+  /** 始まる前に出す言葉（ボスの一言など） */
+  intro?: string;
+  /** 決着のあとの欄（ストーリーの「次へ」など）。無ければ、いつもの「もう一度」「もどる」 */
+  resultPanel?: (result: 'win' | 'lose' | 'draw') => ReactNode;
 }) {
   // コンピュータと対戦の敵は、コンピュータの9体か、ほかの人のロボ（みんなのロボ。動かすのはコンピュータ）
-  const [enemy] = useState(() => net?.opponent ?? pickEnemy());
+  const [enemy] = useState(() => net?.opponent ?? fixedEnemy ?? pickEnemy());
   const [st] = useState(() => {
     const b = createBattle(player, enemy);
     if (net) b.active = net.iFirst ? 0 : 1; // 先に動く人は、部屋で決めたとおり
@@ -152,7 +166,7 @@ export function Battle({
   const [hud, setHud] = useState<[SideHud, SideHud]>(() => [snap(st, 0), snap(st, 1)]);
   const [phase, setPhase] = useState<'intro' | 'command' | 'busy' | 'over'>('intro');
   const [msg, setMsg] = useState(() =>
-    enemy.source === 'rival' ? `だれかのロボ「${enemy.spec.name}」が あらわれた！` : '',
+    intro ?? (enemy.source === 'rival' ? `だれかのロボ「${enemy.spec.name}」が あらわれた！` : ''),
   );
   const [banner, setBanner] = useState<Banner | null>(null);
   const [popups, setPopups] = useState<Popup[]>([]);
@@ -314,6 +328,7 @@ export function Battle({
     const s = stage.current!;
     await s.intro();
     if (!alive.current) return;
+    if (intro) await s.wait(1.6); // ボスの一言を読めるように、少し待つ
     setSplash('READY');
     sfx('ready');
     await s.wait(0.9);
@@ -494,6 +509,9 @@ export function Battle({
         ) : result ? (
           <div className={`result ${result}`}>
             <div className="result-title">{result === 'win' ? 'YOU WIN' : result === 'lose' ? 'YOU LOSE' : 'DRAW'}</div>
+            {resultPanel ? (
+              resultPanel(result)
+            ) : (
             <div className="actions row">
               <button className="btn primary" onClick={onRematch}>
                 {net ? '部屋にもどる' : 'もう一度'}
@@ -504,6 +522,7 @@ export function Battle({
                 </button>
               )}
             </div>
+            )}
           </div>
         ) : (
           <div className={`commands${cmdOn ? '' : ' wait'}`}>

@@ -47,7 +47,7 @@
 - ⚠️ **bash に Python やスクリプトを直接書かない**（クォートや改行が化ける）。スクラッチにファイルとして書いてから走らせる
 - 日本語のファイルは LF。`sed -i` で直すと改行が変わることがある → Edit か、スクラッチの Python で直す
 - 手元の画面の試し：開発中は `window.__stage`（`S.loop()` で1コマずつ）と `window.__battle`。ふたりで対戦は `?localroom` を付けて二つのタブ
-- ロボの見た目の試し：`?showroom` で何体も並べて見る（`&only=0,1`・`&pose=guard`・`&yaw=0.5`・`&zoom=2&y=1.6`・`&battle=1` でそのロボのバトル）。開発中だけ（`src/ui/Showroom.tsx`）
+- ロボの見た目の試し：`?showroom` で何体も並べて見る（`&only=0,1`・`&pose=guard`・`&yaw=0.5`・`&zoom=2&y=1.6`・`&battle=1` でそのロボのバトル。`&cpu` で敵九体、`&minions=1` でストーリーの1章の手下とボス）。開発中だけ（`src/ui/Showroom.tsx`）
 - 効果音は Web Audio（`src/lib/sfx.ts`）。`renderSfx` で画面に出さずに音を作れる
 - ⚠️ **フォルダは OneDrive の中**：同期中のコミットは、まれに競合する。`node_modules` も同期される
 - ⚠️ **フォルダの名前に日本語（デスクトップ）が入っている**：スクリプトでファイルの場所を作るときは `fileURLToPath(import.meta.url)` を使う（`new URL(...).pathname` は `%E3…` のままになり、ファイルが見つからない。2026-11-22 に `check-kanji.mjs` で起きた）

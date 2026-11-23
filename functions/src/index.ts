@@ -18,6 +18,7 @@ import { addWin, garageLimit, makeRobot, MIN_WIN_GAP, readRobotInput, readWinInp
 import { toRival } from '../../server/rival';
 import { needsTextFix, specHardKanji, withFixedText } from '../../src/game/kanji';
 import { sanitizeSpec } from '../../src/game/spec';
+import { afterWin, canWin, readStory } from '../../src/game/story';
 import type { Character, CharacterSpec } from '../../src/game/types';
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
@@ -186,7 +187,8 @@ export const api = onRequest(
     }
 
     // ── ストーリーで勝ったロボに、経験値を足す（勝ったロボだけ。負けても減らない） ──
-    // 前の勝ちから MIN_WIN_GAP より短い知らせは数えない（users/{uid} の lastWinAt。画面からは読み書きできない場所）
+    // 前の勝ちから MIN_WIN_GAP より短い知らせは数えない（users/{uid} の lastWinAt。画面からは書けない場所）。
+    // ストーリーの進み具合（users/{uid} の story）も、ここで進める。開いていない章・とばした敵の勝ちは数えない
     if (isWin) {
       try {
         const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
@@ -203,11 +205,14 @@ export const api = onRequest(
           const now = Date.now();
           const last = Number(me.data()?.lastWinAt ?? 0);
           const robot = snap.data() as Character;
-          if (now - last < MIN_WIN_GAP) return { counted: false, exp: robot.exp ?? 0, level: robot.level ?? 1, up: false };
+          const story = readStory(me.data()?.story);
+          if (now - last < MIN_WIN_GAP || !canWin(story, inp.chapter, inp.slot))
+            return { counted: false, exp: robot.exp ?? 0, level: robot.level ?? 1, up: false, story };
           const w = addWin(robot);
+          const next = afterWin(story, inp.chapter, inp.slot);
           tx.update(ref, { exp: w.exp, level: w.level });
-          tx.set(userRef, { lastWinAt: now, lastWin: { chapter: inp.chapter, slot: inp.slot } }, { merge: true });
-          return { counted: true, exp: w.exp, level: w.level, up: w.up };
+          tx.set(userRef, { lastWinAt: now, lastWin: { chapter: inp.chapter, slot: inp.slot }, story: next }, { merge: true });
+          return { counted: true, exp: w.exp, level: w.level, up: w.up, story: next };
         });
         if (out === 'missing') res.status(404).json({ error: 'not found' });
         else res.json(out);

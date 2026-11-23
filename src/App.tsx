@@ -7,6 +7,8 @@ import { Hangar } from './ui/Hangar';
 import { Battle } from './ui/Battle';
 import { Room } from './ui/Room';
 import { Showroom } from './ui/Showroom';
+import { ChapterView, StoryBattle, StoryMap } from './ui/Story';
+import { chapterLevel, chapterOf } from './game/story';
 import type { NetBattle, RoomSession } from './net/room';
 
 type Screen =
@@ -16,7 +18,11 @@ type Screen =
   | { name: 'pick' } // コンピュータと対戦：戦うロボを選ぶ
   | { name: 'battle'; char: Character; key: number }
   | { name: 'room' }
-  | { name: 'netbattle'; char: Character; net: NetBattle; key: number };
+  | { name: 'netbattle'; char: Character; net: NetBattle; key: number }
+  | { name: 'story' } // ストーリー：章の一覧
+  | { name: 'chapter'; no: number } // 章の5体
+  | { name: 'storypick'; no: number; slot: number } // 戦うロボを選ぶ
+  | { name: 'storybattle'; no: number; slot: number; seed: string; key: number };
 
 export function App() {
   const [screen, setScreen] = useState<Screen>({ name: 'title' });
@@ -81,6 +87,7 @@ export function App() {
           onHangar={() => setScreen({ name: 'hangar' })}
           onPick={() => setScreen({ name: 'pick' })}
           onRoom={() => setScreen({ name: 'room' })}
+          onStory={() => setScreen({ name: 'story' })}
         />
       );
     case 'create':
@@ -100,6 +107,42 @@ export function App() {
       );
     case 'room':
       return <Room session={session} setSession={setSession} onBattle={onNetBattle} onBack={leaveRoom} />;
+    case 'story':
+      return <StoryMap onChapter={(no) => setScreen({ name: 'chapter', no })} onBack={title} />;
+    case 'chapter':
+      return (
+        <ChapterView
+          no={screen.no}
+          onFight={(slot) => setScreen({ name: 'storypick', no: screen.no, slot })}
+          onBack={() => setScreen({ name: 'story' })}
+        />
+      );
+    case 'storypick': {
+      const { no, slot } = screen;
+      return (
+        <Hangar
+          pick
+          barTitle={`${no}章 ・ ${slot === 4 ? 'BOSS' : `${slot + 1}体目`}`}
+          note={`${chapterOf(no)?.theme ?? ''}の章の敵は Lv${chapterLevel(no)}。戦うロボを えらんでください。ロボは、自分のレベルの強さで戦います。`}
+          backLabel="◀ 章の画面"
+          onBack={() => setScreen({ name: 'chapter', no })}
+          onFight={(c) => setScreen({ name: 'storybattle', no, slot, seed: c.seed, key: Date.now() })}
+        />
+      );
+    }
+    case 'storybattle':
+      return (
+        <StoryBattle
+          key={screen.key}
+          no={screen.no}
+          slot={screen.slot}
+          seed={screen.seed}
+          onNext={(slot, seed) => setScreen({ name: 'storybattle', no: screen.no, slot, seed, key: Date.now() })}
+          onPick={(slot) => setScreen({ name: 'storypick', no: screen.no, slot })}
+          onChapter={(no) => setScreen({ name: 'chapter', no })}
+          onMap={() => setScreen({ name: 'story' })}
+        />
+      );
     case 'netbattle': {
       const back = () => {
         screen.net.close();

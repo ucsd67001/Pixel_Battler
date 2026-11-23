@@ -1,7 +1,7 @@
 // 設計図から、数値（HP・SP・攻撃・防御）とスキルの数字を機械で決める。
 // AIには傾向（1〜5）だけを選ばせ、数字はここで決める＝強さの釣り合いを保つため。
 
-import type { Character, CharacterSpec, Rank, Stats } from './types';
+import type { Bias, Character, CharacterSpec, Rank, Stats } from './types';
 import { SKILL_TABLE } from './data';
 import { rngFrom } from './random';
 
@@ -25,16 +25,23 @@ export function computeStats(spec: CharacterSpec, seed: string): { stats: Stats;
     atk: spec.bias.atk + rng() * 1.2,
     def: spec.bias.def + rng() * 1.2,
   };
+  return { ...statsFor(w, power), power };
+}
+
+/** 総合力のランク */
+export const rankOf = (power: number): Rank => (power >= 105 ? 'S' : power >= 100 ? 'A' : power >= 96 ? 'B' : 'C');
+
+/** 傾向（重み）と総合力から、数値を決める。ストーリーの手下（src/game/minions.ts）も、これで数字を決める */
+export function statsFor(w: Bias, power: number): { stats: Stats; rank: Rank } {
   const sum = w.hp + w.sp + w.atk + w.def;
-  const share = (k: keyof typeof w) => Math.min(45, Math.max(10, (w[k] / sum) * power));
+  const share = (k: keyof Bias) => Math.min(45, Math.max(10, (w[k] / sum) * power));
   const stats: Stats = {
     hp: Math.round((900 + share('hp') * 45) / 10) * 10,
     sp: Math.round(40 + share('sp') * 3.2),
     atk: Math.round(80 + share('atk') * 7),
     def: Math.round(60 + share('def') * 6),
   };
-  const rank: Rank = power >= 105 ? 'S' : power >= 100 ? 'A' : power >= 96 ? 'B' : 'C';
-  return { stats, rank, power };
+  return { stats, rank: rankOf(power) };
 }
 
 export function buildCharacter(

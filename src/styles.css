@@ -559,6 +559,137 @@ button {
   font-size: 10px;
   margin-left: 4px;
 }
+/* ストーリー（2026-11-23） */
+.story-screen .stage-bg {
+  position: absolute;
+  inset: 0;
+  opacity: 0.45;
+}
+.story-screen > header,
+.chapter-list,
+.chapter-view {
+  position: relative;
+}
+/* 章が多くても、スマホで下までスクロールできるように */
+.chapter-list,
+.chapter-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
+}
+.chapter-list {
+  display: grid;
+  gap: 8px;
+  width: min(560px, calc(100% - 32px));
+  margin: 12px auto 24px;
+  overflow-y: auto;
+}
+.chapter-item,
+.slot-item {
+  --el: var(--cyan);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  text-align: left;
+  background: rgba(15, 24, 45, 0.88);
+  border: 1px solid var(--panel-line);
+  border-left: 4px solid var(--el);
+  color: inherit;
+  cursor: pointer;
+}
+.chapter-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+  border-left-color: var(--panel-line);
+}
+.chapter-no,
+.slot-no {
+  font-family: var(--mono);
+  font-weight: 900;
+  color: var(--el);
+  min-width: 44px;
+}
+.chapter-name,
+.slot-name {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.chapter-name small,
+.slot-name small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.chapter-state,
+.slot-state {
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.chapter-item.clear .chapter-state {
+  color: var(--gold);
+}
+.chapter-item.run .chapter-state,
+.slot-item.next .slot-state {
+  color: var(--el);
+}
+.chapter-more {
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 8px;
+}
+.chapter-view {
+  display: grid;
+  gap: 14px;
+  width: min(560px, calc(100% - 32px));
+  margin: 12px auto 24px;
+}
+.slot-list {
+  display: grid;
+  gap: 6px;
+}
+.slot-item.done {
+  opacity: 0.6;
+}
+.slot-item.on {
+  box-shadow: inset 0 0 16px color-mix(in srgb, var(--el) 35%, transparent);
+  border-color: var(--el);
+}
+.slot-item.boss .slot-no {
+  color: var(--magenta);
+}
+.slot-item.done .slot-state {
+  color: var(--gold);
+}
+.hud-lv {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--el);
+}
+.story-result {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+}
+.story-gain {
+  font-size: 14px;
+  display: grid;
+  gap: 4px;
+}
+.story-gain .lvup {
+  font-size: 20px;
+  color: var(--gold);
+}
+.story-clear {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--gold);
+}
+
 /* レベル（2026-11-23） */
 .growth {
   display: flex;

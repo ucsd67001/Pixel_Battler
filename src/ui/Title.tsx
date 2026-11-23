@@ -39,11 +39,13 @@ export function Title({
   onHangar,
   onPick,
   onRoom,
+  onStory,
 }: {
   onCreate: () => void;
   onHangar: () => void;
   onPick: () => void; // コンピュータと対戦（戦うロボを選ぶ画面へ）
   onRoom: () => void;
+  onStory: () => void; // ストーリー（章の一覧へ）
 }) {
   const user = useUser();
   const peek = useRoomPeek();
@@ -93,7 +95,12 @@ export function Title({
           </div>
         ) : (
         <div className="menu">
-          <button className="btn primary big" onClick={onCreate}>
+          {latest && (
+            <button className="btn primary big" onClick={onStory}>
+              ストーリー
+            </button>
+          )}
+          <button className={`btn big${latest ? '' : ' primary'}`} onClick={onCreate}>
             写真から作る
           </button>
           {latest && (

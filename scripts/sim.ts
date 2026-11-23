@@ -9,6 +9,7 @@ import { act, createBattle, endTurn, startTurn } from '../src/game/battle';
 import { ELEMENTS, TRAITS } from '../src/game/types';
 import type { Character } from '../src/game/types';
 import { atLevel } from '../src/game/level';
+import { CHAPTERS, enemyAt } from '../src/game/story';
 
 const N = 1500 * CPU_CHARACTERS.length;
 let wins = 0;
@@ -106,3 +107,30 @@ for (const [me, them] of [[1, 1], [50, 50], [99, 99], [2, 1], [5, 1], [11, 1], [
   }
   console.log(`  Lv${me} 対 Lv${them}：勝率 ${pct(w, M)}  平均の行動数 ${(n / M).toFixed(1)}  引き分け ${pct(draw, M)}`);
 }
+
+// ── ストーリー（2026-11-23。src/game/story.ts・minions.ts）──
+// 章N の敵（Lv N）と、ランダムなロボを戦わせる。自分も Lv N のときと、Lv N+3 のとき。
+// 手下は1体目から4体目へ少しずつ勝ちにくく、ボス（5体目）は約50%（同じレベルのとき）になるのがよい
+const S = 1500;
+console.log('ストーリー（何体目ごとの勝率。左が同じレベル、右が自分が3レベル上）：');
+const slotSum = [0, 0, 0, 0, 0].map(() => [0, 0]);
+for (const ch of CHAPTERS) {
+  const row: string[] = [];
+  for (let slot = 0; slot < 5; slot++) {
+    const r = [0, 3].map((plus, k) => {
+      let w = 0;
+      for (let i = 0; i < S; i++) {
+        const seed = `st${ch.no}-${slot}-${i}`;
+        const colors = ['#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0')];
+        const spec = { ...localSpec(seed, colors), element: pick(ELEMENTS), trait: pick(TRAITS) };
+        const c = atLevel(buildCharacter(spec, seed, 'local'), ch.no + plus);
+        if (fight(c, atLevel(enemyAt(ch.no, slot)!, ch.no)).winner === 0) w++;
+      }
+      slotSum[slot][k] += w;
+      return pct(w, S);
+    });
+    row.push(`${enemyAt(ch.no, slot)!.spec.name} ${r[0]}/${r[1]}`);
+  }
+  console.log(`  ${ch.no}章 ` + row.join(' ・ '));
+}
+console.log('  平均：' + slotSum.map(([a, b], i) => `${i + 1}体目 ${pct(a, S * CHAPTERS.length)}/${pct(b, S * CHAPTERS.length)}`).join(' ・ '));
