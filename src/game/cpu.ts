@@ -49,7 +49,7 @@ const VORTEX = cpu(
     },
     trait: 'ironwall',
   },
-  { hp: 2150, sp: 110, atk: 245, def: 225 },
+  { hp: 2120, sp: 110, atk: 242, def: 222 },
 );
 
 // ② けもの型・火・クロー・ラッシュ（速くて強い、守りは弱め）
@@ -74,7 +74,7 @@ const GARUFLARE = cpu(
     },
     trait: 'first',
   },
-  { hp: 1850, sp: 100, atk: 282, def: 175 },
+  { hp: 1850, sp: 100, atk: 268, def: 170 },
 );
 
 // ③ 空中型・光・ライフル・ビーム（回復しながら、遠くから打つ）
@@ -99,7 +99,7 @@ const LUMINAS = cpu(
     },
     trait: 'focus',
   },
-  { hp: 2050, sp: 150, atk: 250, def: 205 },
+  { hp: 1980, sp: 150, atk: 238, def: 200 },
 );
 
 // ④ 人型・水・ソード・スラッシュ（受けて返す、会心の一太刀）
@@ -149,7 +149,7 @@ const TAKELANCER = cpu(
     },
     trait: 'guts',
   },
-  { hp: 1900, sp: 115, atk: 250, def: 185 },
+  { hp: 1900, sp: 115, atk: 256, def: 185 },
 );
 
 // ⑥ けもの型・水・シールド・流星（かたくて、自分で回復する）
@@ -174,7 +174,7 @@ const TURTRON = cpu(
     },
     trait: 'regen',
   },
-  { hp: 2150, sp: 110, atk: 210, def: 230 },
+  { hp: 2090, sp: 110, atk: 207, def: 222 },
 );
 
 // ⑦ けもの型・森・ソード（角）・スラッシュ（相手を弱らせて、守りをつらぬく）
@@ -224,7 +224,7 @@ const PUMPKID = cpu(
     },
     trait: 'fighter',
   },
-  { hp: 1950, sp: 130, atk: 220, def: 200 },
+  { hp: 2060, sp: 130, atk: 228, def: 205 },
 );
 
 // ⑨ 空中型・光・ライフル・ラッシュ（先に動いて、大きな一発）
@@ -249,7 +249,7 @@ const HANABEAT = cpu(
     },
     trait: 'first',
   },
-  { hp: 1850, sp: 115, atk: 255, def: 175 },
+  { hp: 1900, sp: 115, atk: 258, def: 175 },
 );
 
 export const CPU_CHARACTERS: Character[] = [VORTEX, GARUFLARE, LUMINAS, FROSTIA, TAKELANCER, TURTRON, HORNBEAT, PUMPKID, HANABEAT];

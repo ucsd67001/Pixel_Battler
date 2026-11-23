@@ -113,7 +113,7 @@ export function canUse(st: BattleState, side: Side, type: ActionType): boolean {
 }
 
 function addGauge(f: Fighter, n: number) {
-  const m = f.c.spec.trait === 'fighter' ? 1.5 : 1;
+  const m = f.c.spec.trait === 'fighter' ? 1.6 : 1;
   f.gauge = Math.min(MAX_GAUGE, f.gauge + Math.round(n * m));
 }
 
@@ -135,7 +135,7 @@ export function startTurn(st: BattleState): PreTurn {
   me.sp = Math.min(me.c.stats.sp, me.sp + (me.c.spec.trait === 'focus' ? 20 : 10));
   let regen = 0;
   if (me.c.spec.trait === 'regen' && me.hp > 0 && me.hp < me.c.stats.hp) {
-    regen = Math.min(me.c.stats.hp - me.hp, Math.round(me.c.stats.hp * 0.025));
+    regen = Math.min(me.c.stats.hp - me.hp, Math.round(me.c.stats.hp * 0.018));
     me.hp += regen;
   }
   return { side, regen, hpAfter: me.hp };
@@ -163,6 +163,8 @@ export function endTurn(st: BattleState): string[] {
 
 interface DmgOpts {
   ignoreGuard?: boolean;
+  // 何回かに分けて当てる技の、1回分の割合（3回なら 1/3）。必殺ゲージのたまり方を、1回で当てる技とそろえるため
+  share?: number;
   skill?: boolean;
   ult?: boolean;
   isCounter?: boolean;
@@ -174,14 +176,14 @@ function dealDamage(st: BattleState, attacker: Side, mult: number, rng: Rng, opt
   const D = st.f[t];
   const atk = A.c.stats.atk * buffMult(A, 'atk');
   let def = D.c.stats.def * buffMult(D, 'def');
-  if (D.c.spec.trait === 'ironwall' && D.hp < D.c.stats.hp / 2) def *= 1.5;
+  if (D.c.spec.trait === 'ironwall' && D.hp < D.c.stats.hp / 2) def *= 1.6;
   if (A.c.spec.trait === 'pierce') def *= 0.75;
   let m = mult;
-  if (A.c.spec.trait === 'focus' && opts.skill) m *= 1.2;
+  if (A.c.spec.trait === 'focus' && opts.skill) m *= 1.35;
   if (A.c.spec.bonus && (opts.skill || opts.ult)) m *= BONUS_SKILL; // 特別な写真のロボは、技が少し強い
   if (A.c.spec.trait === 'first' && !A.firstUsed) m *= 1.5;
   const eff = elementMultiplier(A.c.spec.element, D.c.spec.element);
-  const crit = rng() < (A.c.spec.trait === 'lucky' ? 0.25 : 0.08);
+  const crit = rng() < (A.c.spec.trait === 'lucky' ? 0.3 : 0.08);
   let dmg = atk * m * 1.35 * (300 / (300 + def)) * eff * (crit ? 1.5 : 1) * (0.92 + rng() * 0.16);
   const guarded = D.guarding && !opts.ignoreGuard;
   if (guarded) dmg *= opts.ult ? 0.5 : 0.4;
@@ -194,8 +196,11 @@ function dealDamage(st: BattleState, attacker: Side, mult: number, rng: Rng, opt
     guts = true;
   }
   D.hp = Math.max(0, D.hp - amount);
-  if (!opts.ult && !opts.isCounter) addGauge(A, 11);
-  addGauge(D, 14);
+  // 必殺ゲージ：打つと +11、打たれると +14。何回かに分けて当てる技は、合わせて1回分（2026-11-23。
+  // それまでは1回ごとにたまり、5回打ちの必殺技で相手のゲージが70もたまっていた）
+  const share = opts.share ?? 1;
+  if (!opts.ult && !opts.isCounter) addGauge(A, 11 * share);
+  addGauge(D, 14 * share);
   return { target: t, amount, crit, eff, guarded, hpAfter: D.hp, guts };
 }
 
@@ -240,7 +245,7 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
           hit(2.0);
           break;
         case 'barrage':
-          for (let i = 0; i < 3; i++) hit(0.65);
+          for (let i = 0; i < 3; i++) hit(0.65, { share: 1 / 3 });
           break;
         case 'drain': {
           const h = hit(1.4);
@@ -253,7 +258,7 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
           res.buffs.push({ target: d, label: 'ぼうぎょダウン', good: false });
           break;
         case 'heal':
-          heal(A.c.stats.hp * 0.32);
+          heal(A.c.stats.hp * 0.27);
           break;
         case 'powerup':
           addBuff(A, { stat: 'atk', mult: 1.6, turns: 3, fresh: true, label: 'こうげきアップ' });
@@ -263,11 +268,11 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
         case 'fortify':
           addBuff(A, { stat: 'def', mult: 1.6, turns: 3, fresh: true, label: 'ぼうぎょアップ' });
           res.buffs.push({ target: a, label: 'ぼうぎょアップ', good: true });
-          heal(A.c.stats.hp * 0.15);
+          heal(A.c.stats.hp * 0.17);
           addGauge(A, 15);
           break;
         case 'hex':
-          hit(0.8);
+          hit(0.9);
           addBuff(D, { stat: 'atk', mult: 0.7, turns: 3, fresh: false, label: 'こうげきダウン' });
           res.buffs.push({ target: d, label: 'こうげきダウン', good: false });
           break;
@@ -283,7 +288,7 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
       res.name = u.name;
       A.gauge = 0;
       const n = ULT_TABLE[u.style].hits;
-      for (let i = 0; i < n; i++) hit(ULT_POWER / n, { ult: true });
+      for (let i = 0; i < n; i++) hit(ULT_POWER / n, { ult: true, share: 1 / n });
       break;
     }
   }
@@ -291,7 +296,7 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
   // 反撃の構え：攻撃を受けたら、受け流して打ち返す
   if (D.counter && res.hits.length > 0 && D.hp > 0) {
     D.counter = false;
-    res.counterHit = dealDamage(st, d, 1.5, rng, { ignoreGuard: true, isCounter: true });
+    res.counterHit = dealDamage(st, d, 1.7, rng, { ignoreGuard: true, isCounter: true });
   }
   if (res.hits.length > 0) A.firstUsed = true;
   A.lastGuard = type === 'guard';
