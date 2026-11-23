@@ -11,9 +11,10 @@ import type { Character } from './types';
 import { deleteCharacter, findBySeed, garageFullMsg, GARAGE_LIMIT, loadHangar, saveCharacter, updateCharacter } from './storage';
 import { needsTextFix, withFixedText } from './kanji';
 import { sanitizeSpec } from './spec';
-import { EXP_PER_WIN, growthOf } from './level';
-import { afterWin, canWin, EMPTY_STORY, readStory, type StoryProgress } from './story';
-import { currentUser, firestore, idToken, useUser } from '../lib/firebase';
+import { addWin, growthOf } from './level';
+import { afterWin, canWin, EMPTY_STORY, readStory, type StoryProgress } from './progress';
+import { currentUser, firestore, useUser } from '../lib/firebase';
+import { postApi } from '../lib/api';
 
 const CLOUD = !import.meta.env.DEV;
 
@@ -29,9 +30,7 @@ function cloudLimit(uid: string): Promise<number> {
   let p = limits.get(uid);
   if (!p) {
     p = (async () => {
-      const token = await idToken();
-      if (!token) throw new Error('login required');
-      const r = await fetch('/api/garage', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      const r = await postApi('/api/garage', undefined, { needLogin: true });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return Number((await r.json()).limit) || GARAGE_LIMIT;
     })();
@@ -43,13 +42,11 @@ function cloudLimit(uid: string): Promise<number> {
 
 // サーバーに、ロボをクラウドのガレージへ入れてもらう。返ってくるのは、サーバーが組み立て直したロボ
 async function postRobot(c: Character): Promise<Character | 'full'> {
-  const token = await idToken();
-  if (!token) throw new Error('login required');
-  const r = await fetch('/api/robots', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ hash: c.seed, thumb: c.thumb, spec: c.spec, source: c.source, createdAt: c.createdAt }),
-  });
+  const r = await postApi(
+    '/api/robots',
+    { hash: c.seed, thumb: c.thumb, spec: c.spec, source: c.source, createdAt: c.createdAt },
+    { needLogin: true },
+  );
   if (r.status === 409) return 'full';
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return (await r.json()).robot as Character;
@@ -92,20 +89,10 @@ async function fixTexts(list: Character[], cloud: boolean, changed: () => void) 
     fixing.add(c.seed);
     try {
       if (cloud) {
-        const token = await idToken();
-        if (!token) return;
-        const r = await fetch('/api/robots/fix', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ hash: c.seed }),
-        });
+        const r = await postApi('/api/robots/fix', { hash: c.seed }, { needLogin: true });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
       } else {
-        const r = await fetch('/api/fix-text', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ spec: c.spec }),
-        });
+        const r = await postApi('/api/fix-text', { spec: c.spec });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         updateCharacter(withFixedText(c, sanitizeSpec((await r.json()).spec)));
         changed();
@@ -287,13 +274,7 @@ export function useGarage(): Garage {
     // 本番では、いつもサーバーに送る（この画面のログインの状態を読み終える前でも。2026-11-23、
     // 勝った直後にまだ読み終えていなくて、このスマホの中に記録しようとして失敗していた）
     if (CLOUD && firestore() && (isCloud || currentUser())) {
-      const token = await idToken();
-      if (!token) throw new Error('login required');
-      const r = await fetch('/api/robots/win', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ hash: c.seed, chapter, slot }),
-      });
+      const r = await postApi('/api/robots/win', { hash: c.seed, chapter, slot }, { needLogin: true });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return (await r.json()) as WinResult; // ガレージの一覧は onSnapshot で新しくなる
     }
@@ -301,14 +282,16 @@ export function useGarage(): Garage {
     const cur = findBySeed(c.seed);
     if (!cur) throw new Error('not found');
     const story = loadLocalStory();
-    const before = growthOf(cur.exp);
-    if (!canWin(story, chapter, slot)) return { counted: false, exp: before.exp, level: before.level, up: false, story };
-    const after = growthOf(before.exp + EXP_PER_WIN);
-    updateCharacter({ ...cur, exp: after.exp, level: after.level });
+    if (!canWin(story, chapter, slot)) {
+      const g = growthOf(cur.exp);
+      return { counted: false, exp: g.exp, level: g.level, up: false, story };
+    }
+    const w = addWin(cur.exp);
+    updateCharacter({ ...cur, exp: w.exp, level: w.level });
     setLocal(loadHangar());
     const next = afterWin(story, chapter, slot);
     saveLocalStory(next);
-    return { counted: true, exp: after.exp, level: after.level, up: after.level > before.level, story: next };
+    return { counted: true, exp: w.exp, level: w.level, up: w.up, story: next };
   };
 
   return {

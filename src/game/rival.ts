@@ -5,8 +5,8 @@
 import type { Character } from './types';
 import { pickCpu } from './cpu';
 import { buildCharacter } from './stats';
-import { sanitizeSpec } from './spec';
-import { idToken } from '../lib/firebase';
+import { isHash, sanitizeSpec } from './spec';
+import { postApi } from '../lib/api';
 
 /** みんなのロボが出る割合 */
 export const RIVAL_RATE = 0.5;
@@ -20,16 +20,14 @@ export function prefetchRival(): Promise<void> {
   if (loading) return loading;
   loading = (async () => {
     try {
-      const headers: Record<string, string> = {};
-      const token = await idToken().catch(() => null);
-      if (token) headers.Authorization = `Bearer ${token}`;
-      const r = await fetch('/api/rival', { method: 'POST', headers });
+      const r = await postApi('/api/rival');
       if (!r.ok) return;
       const data = await r.json();
       const seed = String(data?.robot?.seed ?? '');
-      if (!/^[a-f0-9]{64}$/.test(seed)) return;
+      if (!isHash(seed)) return;
       // 強さとランクは、写真の印と設計図から、ここで計算し直す（サーバーと同じ計算）
-      const c = buildCharacter(sanitizeSpec(data.robot.spec), seed, 'rival');
+      // 特別な写真のしるし（bonus）は、ここでも受け取らない
+      const c = buildCharacter({ ...sanitizeSpec(data.robot.spec), bonus: 0 }, seed, 'rival');
       next = { ...c, id: `rival-${c.id}` };
     } catch {
       // つながらないときは、コンピュータの敵だけで遊ぶ
@@ -38,14 +36,6 @@ export function prefetchRival(): Promise<void> {
     }
   })();
   return loading;
-}
-
-/** もらっておいた、みんなのロボを使う（無ければ null）。ストーリーの乱入のため */
-export function takeRival(): Character | null {
-  const c = next;
-  next = null;
-  void prefetchRival();
-  return c;
 }
 
 /** 次のバトルの敵。みんなのロボを使ったら、次の一体をまたもらっておく */

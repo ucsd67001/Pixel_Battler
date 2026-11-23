@@ -1,7 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import type { Character } from '../game/types';
 import { useGarage } from '../game/garage';
-import { prefetchRival } from '../game/rival';
 import { ELEMENT_INFO } from '../game/data';
 import { levelOf } from '../game/level';
 import { CharacterCard } from './CharacterCard';
@@ -31,10 +30,6 @@ export function Hangar({
   const setSel = (c: Character) => setSelSeed(c.seed);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  // 「コンピュータと対戦」のときは、あいてになる、ほかの人のロボを先にもらっておく
-  useEffect(() => {
-    if (pick) void prefetchRival();
-  }, [pick]);
   useEffect(() => {
     if (selSeed && !list.some((c) => c.seed === selSeed)) setSelSeed(null);
   }, [list, selSeed]);
@@ -66,7 +61,7 @@ export function Hangar({
       </header>
       {pick ? (
         <div className="garage-note">
-          {note ?? 'コンピュータと戦うロボを えらんでください。ほかの人が作ったロボ（だれかのロボ）が、あいてになることも あります。'}
+          {note ?? 'コンピュータと戦うロボを 選んでください。ほかの人が作ったロボ（だれかのロボ）が、あいてになることも あります。'}
         </div>
       ) : (
         <div className="garage-note">

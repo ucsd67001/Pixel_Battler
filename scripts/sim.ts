@@ -2,14 +2,10 @@
 // 敵は順番に全員と戦わせ、敵ごとの勝率も出す（どの敵も 45〜55% くらいになるのがよい）。
 // 使い方：npm run sim
 
-import { localSpec } from '../src/game/fallback';
-import { buildCharacter } from '../src/game/stats';
-import { CPU_CHARACTERS, chooseAction } from '../src/game/cpu';
-import { act, createBattle, endTurn, startTurn } from '../src/game/battle';
-import { ELEMENTS, TRAITS } from '../src/game/types';
-import type { Character } from '../src/game/types';
-import { atLevel } from '../src/game/level';
-import { CHAPTERS, enemyAt } from '../src/game/story';
+import { CPU_CHARACTERS } from '../src/game/cpu';
+import { atLevel, growthOf, EXP_PER_WIN } from '../src/game/level';
+import { fight, pct, pick, randomRobot } from './battle-lib';
+import { CHAPTERS, CHAPTER_SIZE, chapterLevel, enemyAt } from '../src/game/story';
 
 const N = 1500 * CPU_CHARACTERS.length;
 let wins = 0;
@@ -21,26 +17,13 @@ const byTrait: Record<string, [number, number]> = {};
 const byKind: Record<string, [number, number]> = {};
 const byElement: Record<string, [number, number]> = {};
 
-// 敵の順番（i を割ったあまり）とかたよらないように、乱数で選ぶ
-const pick = <T,>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)];
-
 for (let i = 0; i < N; i++) {
-  const seed = 'sim' + i;
-  const colors = ['#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0')];
-  // 色から作るロボは、風・底力・見切りにならないので、属性と特性は全部から順に選ぶ
-  const spec = { ...localSpec(seed, colors), element: pick(ELEMENTS), trait: pick(TRAITS) };
-  const c = buildCharacter(spec, seed, 'local');
+  const c = randomRobot('sim' + i);
   const enemy = CPU_CHARACTERS[i % CPU_CHARACTERS.length];
-  const st = createBattle(c, enemy);
-  while (!st.over && st.turn < 200) {
-    startTurn(st);
-    // プレイヤー役も CPU と同じ考え方で動かす
-    const a = chooseAction(st, st.active, Math.random);
+  // プレイヤー役も CPU と同じ考え方で動かす
+  const st = fight(c, enemy, (a) => {
     if (a === 'ultimate') ults++;
-    act(st, a, Math.random);
-    if (st.over) break;
-    endTurn(st);
-  }
+  });
   const win = st.winner === 0 ? 1 : 0;
   wins += win;
   turns += st.turn;
@@ -57,7 +40,6 @@ for (let i = 0; i < N; i++) {
   }
 }
 
-const pct = (a: number, b: number) => `${((a / b) * 100).toFixed(1)}%`;
 console.log(`勝率 ${pct(wins, N)}  平均の行動数 ${(turns / N).toFixed(1)}  必殺技 ${(ults / N).toFixed(2)}回/戦`);
 for (const [name, tbl] of [
   ['敵', byCpu],
@@ -79,16 +61,6 @@ for (const [name, tbl] of [
 // ランダムなロボを、ランダムな敵九体と、レベルを変えて戦わせる。
 //   ・同じレベルどうしなら、Lv1 でも Lv99 でも、行動数と引き分けがほぼ同じになるのがよい
 //   ・レベルが上のほうが、はっきり勝ちやすくなるのがよい
-function fight(a: Character, b: Character) {
-  const st = createBattle(a, b);
-  while (!st.over && st.turn < 200) {
-    startTurn(st);
-    act(st, chooseAction(st, st.active, Math.random), Math.random);
-    if (st.over) break;
-    endTurn(st);
-  }
-  return st;
-}
 const M = 4000;
 console.log('レベル（自分 対 敵）：');
 for (const [me, them] of [[1, 1], [50, 50], [99, 99], [2, 1], [5, 1], [11, 1], [9, 5], [60, 50], [99, 89]]) {
@@ -97,9 +69,7 @@ for (const [me, them] of [[1, 1], [50, 50], [99, 99], [2, 1], [5, 1], [11, 1], [
   let draw = 0;
   for (let i = 0; i < M; i++) {
     const seed = 'lv' + i;
-    const colors = ['#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0')];
-    const spec = { ...localSpec(seed, colors), element: pick(ELEMENTS), trait: pick(TRAITS) };
-    const c = atLevel(buildCharacter(spec, seed, 'local'), me);
+    const c = atLevel(randomRobot(seed), me);
     const st = fight(c, atLevel(pick(CPU_CHARACTERS), them));
     if (st.winner === 0) w++;
     if (st.draw) draw++;
@@ -109,7 +79,7 @@ for (const [me, them] of [[1, 1], [50, 50], [99, 99], [2, 1], [5, 1], [11, 1], [
 }
 
 // ── ストーリー（2026-11-23。src/game/story.ts・minions.ts）──
-// 章N の敵（Lv N）と、ランダムなロボを戦わせる。自分も Lv N のときと、Lv N+3 のとき。
+// 章の敵（chapterLevel）と、ランダムなロボを戦わせる。自分も同じレベルのときと、3レベル上のとき。
 // 手下は1体目から4体目へ少しずつ勝ちにくく、ボス（5体目）は約50%（同じレベルのとき）になるのがよい
 const S = 1500;
 console.log('ストーリー（何体目ごとの勝率。左が同じレベル、右が自分が3レベル上）：');
@@ -121,10 +91,8 @@ for (const ch of CHAPTERS) {
       let w = 0;
       for (let i = 0; i < S; i++) {
         const seed = `st${ch.no}-${slot}-${i}`;
-        const colors = ['#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0')];
-        const spec = { ...localSpec(seed, colors), element: pick(ELEMENTS), trait: pick(TRAITS) };
-        const c = atLevel(buildCharacter(spec, seed, 'local'), ch.no + plus);
-        if (fight(c, atLevel(enemyAt(ch.no, slot)!, ch.no)).winner === 0) w++;
+        const c = atLevel(randomRobot(seed), chapterLevel(ch.no) + plus);
+        if (fight(c, atLevel(enemyAt(ch.no, slot)!, chapterLevel(ch.no))).winner === 0) w++;
       }
       slotSum[slot][k] += w;
       return pct(w, S);
@@ -134,3 +102,60 @@ for (const ch of CHAPTERS) {
   console.log(`  ${ch.no}章 ` + row.join(' ・ '));
 }
 console.log('  平均：' + slotSum.map(([a, b], i) => `${i + 1}体目 ${pct(a, S * CHAPTERS.length)}/${pct(b, S * CHAPTERS.length)}`).join(' ・ '));
+
+// ── 通しで遊ぶ（2026-11-23）──
+// ランダムなロボ1体で、1章から順に進む（ロボをかえない）。負けたら、その章の1体目と一度戦い（勝てば経験値。レベル上げ）、
+// それから負けた敵にもう一度ちょうせんする。
+// 章ごとに、何回戦ったか（レベル上げの分もふくむ）・始めたときの自分のレベルを出す。
+// 「戦った回数」が 5 に近いほど楽、大きいほど負けが多い。ボスで10回以上負けた人の割合も出す。
+// 同じ敵に 40回続けて負けたら、そこで止まる（ほんとうは、ロボをかえるか、前の章でレベル上げをする）。止まった人の割合も出す
+const P = 600;
+const GIVE_UP = 40;
+const tries = CHAPTERS.map(() => 0);
+const lvAt = CHAPTERS.map(() => 0);
+const stuck = CHAPTERS.map(() => 0);
+const reached = CHAPTERS.map(() => 0);
+const gaveUp = CHAPTERS.map(() => 0);
+for (let i = 0; i < P; i++) {
+  const seed = 'run' + i;
+  const base = randomRobot(seed);
+  let exp = 0;
+  let out = false;
+  for (const ch of CHAPTERS) {
+    const k = ch.no - 1;
+    reached[k]++;
+    lvAt[k] += growthOf(exp).level;
+    for (let slot = 0; slot < CHAPTER_SIZE && !out; slot++) {
+      let lost = 0;
+      for (;;) {
+        tries[k]++;
+        const me = atLevel(base, growthOf(exp).level);
+        if (fight(me, atLevel(enemyAt(ch.no, slot)!, chapterLevel(ch.no))).winner === 0) break;
+        if (++lost >= GIVE_UP) {
+          out = true;
+          break;
+        }
+        if (slot > 0) {
+          // レベル上げ：1体目と一度戦う
+          tries[k]++;
+          if (fight(atLevel(base, growthOf(exp).level), atLevel(enemyAt(ch.no, 0)!, chapterLevel(ch.no))).winner === 0) exp += EXP_PER_WIN;
+        }
+      }
+      if (slot === CHAPTER_SIZE - 1 && lost >= 10) stuck[k]++;
+      if (!out) exp += EXP_PER_WIN;
+    }
+    if (out) {
+      gaveUp[k]++;
+      break;
+    }
+  }
+}
+console.log('通しで遊ぶ（1体で進む。負けたら1体目でレベル上げ。戦った回数は5が最少）：');
+for (const ch of CHAPTERS) {
+  const k = ch.no - 1;
+  const n = Math.max(1, reached[k]);
+  console.log(
+    `  ${ch.no}章（敵 Lv${chapterLevel(ch.no)}）：始めの自分 Lv${(lvAt[k] / n).toFixed(1)}  戦った回数 ${(tries[k] / n).toFixed(1)}  ` +
+      `ボスで10回以上負け ${pct(stuck[k], n)}  ここで止まった ${pct(gaveUp[k], P)}`,
+  );
+}

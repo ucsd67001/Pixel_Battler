@@ -128,5 +128,20 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), apiPlugin(env)],
     server: { port: 5180 },
+    build: {
+      // 変わりにくい部品（3D・Firebase・React）を、ゲームのコードと別のファイルにする。
+      // ゲームを出し直しても、こちらはブラウザに残っているものが使えるので、2回目からの読みこみが軽い
+      rollupOptions: {
+        output: {
+          manualChunks(id: string) {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('/three/')) return 'three';
+            if (id.includes('/firebase/') || id.includes('/@firebase/')) return 'firebase';
+            return 'vendor';
+          },
+        },
+      },
+      chunkSizeWarningLimit: 800,
+    },
   };
 });

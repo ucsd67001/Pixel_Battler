@@ -3,10 +3,10 @@
 // 手元（vite.config.ts）でも Firebase の Cloud Functions（functions/src/index.ts）でも、analyzeImage をそのまま呼ぶ。
 // 取っておく場所（cache）は呼ぶ側が渡す：手元はファイル、Firebase は Firestore。
 
-import type { CharacterSpec } from '../src/game/types';
-import { sanitizeSpec, SPEC_JSON_SCHEMA } from '../src/game/spec';
+import { SKILL_KINDS, TRAITS, type CharacterSpec } from '../src/game/types';
+import { isHash, sanitizeSpec, SPEC_JSON_SCHEMA } from '../src/game/spec';
 import { hardKanji, specHardKanji } from '../src/game/kanji';
-import { SKILL_TABLE, ULT_TABLE } from '../src/game/data';
+import { SKILL_TABLE, TRAIT_TABLE, ULT_TABLE } from '../src/game/data';
 
 // 指示を大きく変えたら上げる（同じ写真でも、前の指示で作った設計図を返さないため）
 const CACHE_VERSION = 'k2';
@@ -31,6 +31,10 @@ export interface AnalyzeResult {
   model: string;
 }
 
+// 技と特性の説明は、画面に出す表（data.ts）から作る（画面の名前と、AI に伝える名前がずれないように）
+const SKILL_LINE = SKILL_KINDS.map((k) => `${k}（${SKILL_TABLE[k].label}：${SKILL_TABLE[k].effect}）`).join(' / ');
+const TRAIT_LINE = TRAITS.map((k) => `${k}（${TRAIT_TABLE[k].label}：${TRAIT_TABLE[k].effect}）`).join(' / ');
+
 const SYSTEM_PROMPT = `あなたは、写真から「オリジナルのSDロボット戦士」を一体設計する、メカデザイナー兼ゲームデザイナーです。
 このゲームでは、写真を読み込むとロボが生まれ、ターン制で戦います。
 このゲームで遊ぶのは、おもに小学6年生です。名前・二つ名・紹介文・技の名前・叫びは、小学6年生がすらすら読めて、意味が分かって、思わず声に出したくなる、かっこいいものにしてください。
@@ -54,21 +58,26 @@ const SYSTEM_PROMPT = `あなたは、写真から「オリジナルのSDロボ�
 - 人を傷つける言葉・差別的な言葉・実在の人物の名前は使わない。
 
 選択肢の意味：
-- form：humanoid＝人型（立ち姿が似合うもの：道具・建物・服・人工物） / beast＝四つ足の獣型（動物・乗り物・家具など、横に長いもの・速いもの・力強いもの） / floater＝浮遊型（丸いもの・軽いもの・光るもの・食べ物・空や宇宙のもの）。獣型の weapon は、角（sword・lance）・背中の砲（rifle）・尾の槌（hammer）・肩の盾（shield）・前足の爪（claw）・牙（none）になる。浮遊型は、体のまわりに浮かぶ両手で武器を持つ
+- form：humanoid＝人型（立ち姿が似合うもの：道具・建物・服・人工物） / beast＝四つ足の獣型（動物・乗り物・家具など、横に長いもの・速いもの・力強いもの） / floater＝浮遊型（丸いもの・軽いもの・光るもの・食べ物・空や宇宙のもの）。
 - element：blaze＝火・熱・赤・情熱 / tide＝水・氷・海・青・冷静 / verdant＝地（大地・土・岩・山・木や森・植物・金属・茶色や緑。どっしり、力強い） / gale＝風（空・鳥・羽・雲・虫・乗り物・速いもの・軽いもの・すずしい色） / light＝光・金・白・電気・神聖 / dark＝夜・影・黒・神秘・冷たい機械
 - parts.head：vfin＝V字の角（主人公らしい） / horns＝二本の角（猛々しい） / mono＝一つ目のバイザー（無機質） / crest＝とさかのフィン（騎士） / ears＝耳型センサー（動物・かわいい） / crown＝王冠（高貴）
 - parts.body：standard / slim（すばやい） / heavy（重装）
 - parts.arms：standard / heavy（大きな手甲） / blade（腕に刃）
 - parts.legs：standard / heavy（太い） / thruster（噴射口つき）
 - parts.back：none / wings（翼） / boosters（推進器） / cannons（肩のキャノン） / cape（マント）
-- parts.weapon：none（拳） / sword（剣） / lance（槍） / rifle（銃） / hammer（槌） / shield（盾と拳） / claw（爪）
-- skill.kind：strike（強烈な一撃） / barrage（三連撃） / drain（攻撃して吸収） / breaker（守りを砕く） / heal（回復） / powerup（攻撃強化） / fortify（防御強化） / hex（相手を弱らせる） / counter（反撃の構え）
+- parts.weapon：none（拳） / sword（剣） / lance（槍） / rifle（銃） / hammer（槌） / shield（盾と拳） / claw（爪）。見た目の設定に残るだけ（いまは、どのロボも素手）
+- skill.kind：${SKILL_LINE}
 - ultimate.style：beam（極太のビーム） / slash（一閃） / meteor（流星を降らせる） / burst（大爆発） / rush（乱舞）
-- trait：first（先制） / guts（不屈：一度だけHP1で耐える） / pierce（貫通） / regen（再生） / focus（集中：SPの回復が2倍） / ironwall（堅牢：ピンチで防御アップ） / fighter（闘志：必殺ゲージが早くたまる） / lucky（強運：会心が出やすい） / grit（底力：ピンチでこうげきアップ） / evade（見切り：ときどき、こうげきをかわす）`;
+- trait：${TRAIT_LINE}`;
 
 const USER_PROMPT = 'この写真から、ロボを一体設計してください。';
 
 const REASONING = /^(gpt-5|gpt-6|o1|o3|o4)/;
+
+/** 予備のモデル。決めたモデルで失敗したら、こちらでもう一度ためす */
+const BACKUP_MODEL = 'gpt-4.1-mini';
+/** ためす順のモデル（決めたモデル → 予備） */
+const modelsFor = (model: string) => (model === BACKUP_MODEL ? [model] : [model, BACKUP_MODEL]);
 
 async function callOpenAI(image: string, model: string, apiKey: string, rule: string, avoid: string[] = []): Promise<unknown> {
   const text = avoid.length
@@ -223,7 +232,7 @@ const hasWeaponWords = (s: CharacterSpec) => weaponWordsOf(Object.values(bareTex
  * それでも残っていたら、その言葉を名指しして、もう一度だけ。書き直せたら bare: 1 をつける。AI につながらなければ、元のまま
  */
 async function rewriteBare(spec: CharacterSpec, opt: { apiKey: string; model: string }): Promise<CharacterSpec> {
-  const models = opt.model === 'gpt-4.1-mini' ? [opt.model] : [opt.model, 'gpt-4.1-mini'];
+  const models = modelsFor(opt.model);
   const sk = SKILL_TABLE[spec.skill.kind];
   const info = [
     `ロボの名前：${spec.name}（写真のモチーフ：${spec.motif}）`,
@@ -292,7 +301,7 @@ export async function refreshText(spec: CharacterSpec, opt: { apiKey: string; mo
 export async function fixSpecText(spec: CharacterSpec, opt: { apiKey: string; model: string }): Promise<CharacterSpec> {
   let best = spec;
   let hard = specHardKanji(spec);
-  const models = opt.model === 'gpt-4.1-mini' ? [opt.model] : [opt.model, 'gpt-4.1-mini'];
+  const models = modelsFor(opt.model);
   for (let round = 0; round < 2 && hard.length; round++) {
     let raw: unknown = null;
     for (const model of models) {
@@ -322,7 +331,7 @@ export async function fixSpecText(spec: CharacterSpec, opt: { apiKey: string; mo
 }
 
 export async function analyzeImage(image: string, hash: string, opt: AnalyzeOptions): Promise<AnalyzeResult> {
-  if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error('bad hash');
+  if (!isHash(hash)) throw new Error('bad hash');
   if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(image)) throw new Error('bad image');
 
   // 同じ写真には、同じ設計図を返す
@@ -330,8 +339,7 @@ export async function analyzeImage(image: string, hash: string, opt: AnalyzeOpti
   if (hit) return { spec: sanitizeSpec(hit), cached: true, model: 'cache' };
 
   const rule = opt.hiddenRule?.trim() || '- bonus：いつも 0 にする。';
-  const models = [opt.model];
-  if (opt.model !== 'gpt-4.1-mini') models.push('gpt-4.1-mini');
+  const models = modelsFor(opt.model);
   let lastError: unknown = null;
   for (const model of models) {
     try {

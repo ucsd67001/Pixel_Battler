@@ -57,6 +57,13 @@ export function growthOf(exp: number | undefined): Growth {
   return { level, exp: e, into, need, winsLeft: need ? Math.ceil((need - into) / EXP_PER_WIN) : 0 };
 }
 
+/** 1勝ぶんの経験値を足した、新しい経験値とレベル（サーバーと、手元の記録の両方が使う） */
+export function addWin(exp: number | undefined) {
+  const before = growthOf(exp);
+  const after = growthOf(Math.min(MAX_EXP, before.exp + EXP_PER_WIN));
+  return { exp: after.exp, level: after.level, before: before.level, up: after.level > before.level };
+}
+
 /** ガレージのロボのレベル（経験値から出す。経験値の無いロボは Lv1） */
 export const levelOf = (c: Character) => growthOf(c.exp).level;
 
@@ -65,6 +72,15 @@ export const levelMult = (level: number) => 1 + LEVEL_STEP * (clampLevel(level) 
 
 /** バトルで使う倍率（atLevel で強くしたロボだけ。ほかは 1） */
 export const fightMult = (c: Character) => levelMult(c.fightLevel ?? 1);
+
+/**
+ * SP の量（スキルに使う SP・毎ターンたまる SP・ガードでたまる SP）を、そのレベルの大きさにする。
+ * どれも 5 の倍数なので、「5 にあたる量」を一度だけ四捨五入してからかける。
+ * こうすると、使う量とたまる量の比が Lv1 といつも同じになる（別々に四捨五入すると、Lv2 で 31 と 10 のように、ずれていた）
+ */
+export const spAt = (n: number, level: number) => (n / 5) * Math.max(1, Math.round(5 * levelMult(level)));
+/** バトルの中で、そのロボの SP の量にする */
+export const spFor = (c: Character, n: number) => spAt(n, c.fightLevel ?? 1);
 
 /**
  * ストーリーのバトルで戦うときの姿にする（数字をそのレベルの分だけ大きくする）。
@@ -81,7 +97,7 @@ export function atLevel(c: Character, level: number): Character {
       atk: Math.round(c.stats.atk * k),
       def: Math.round(c.stats.def * k),
     },
-    skill: { ...c.skill, spCost: Math.round(c.skill.spCost * k) },
+    skill: { ...c.skill, spCost: spAt(c.skill.spCost, lv) },
     fightLevel: lv,
   };
 }

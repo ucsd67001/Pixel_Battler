@@ -31,7 +31,8 @@ function elementFromColor(hex: string): Element {
   if (s < 0.18) return l > 0.6 ? 'light' : 'dark';
   if (h < 40 || h >= 330) return 'blaze';
   if (h < 70) return 'light';
-  if (h < 170) return 'verdant'; // 緑は「地」（もとの「森」）。色から作るロボは、風にはならない
+  if (h < 140) return 'verdant'; // 緑は「地」（もとの「森」）
+  if (h < 190) return 'gale'; // 青みどり（風の色）
   if (h < 260) return 'tide';
   return 'dark';
 }

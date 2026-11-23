@@ -1,7 +1,11 @@
 // ストーリーの手下（各章の1〜4体目）。最初の9章で36体（2026-11-23。docs/STORY.md の段階4）。
 // ⚠️ 下書き：名前・見た目・技は、持ち主に見てもらってから決める。
-//   ・章の雰囲気（地の章なら、石ころ・モグラ…）をそろえる。属性は、だいたい章の属性
-//   ・強さ：レベルはボスと同じ（章N → Lv N）。もとの数字はボスより低い（ランク C〜B）。1体目から4体目へ、少しずつ強くする
+//   ・章の雰囲気（地の章なら、石ころ・モグラ…）をそろえる
+//   ・属性：4体のうち2体は、章とちがう属性にまぜる（2026-11-23、持ち主が決めた）。どの属性のロボでも、勝ちやすい敵がいるように。
+//     属性の相性はとても強い（同じ敵でも、属性しだいで勝率が3%〜96%）。地・水・火・風の手下は、それに弱い属性のロボの「かべ」になる。
+//     そこで1章の1体目は夜（どの属性のロボも勝ちやすい）にして、1体目でだれでもレベル上げができるようにした。
+//     2体目の火は、1章の地に弱い水のロボの、楽な相手。各章のかっこの中が、まぜた属性
+//   ・強さ：レベルはボスと同じ（chapterLevel）。もとの数字はボスより低い（ランク C〜B）。1体目から4体目へ、少しずつ強くする
 //   ・数字は手で決めず、傾向（bias）と総合力（power）から statsFor で決める。
 //     power は、同じレベルのランダムなロボが勝つ割合が MINION_TARGET になるように、npm run tune:minions で合わせた
 //   ・どれも素手（設計図の weapon は 'none'）
@@ -9,7 +13,7 @@
 import type {
   ArmType, BackType, BodyType, Bias, Character, Element, Form, HeadType, LegType, Rank, SkillKind, Trait, UltStyle,
 } from './types';
-import { SKILL_TABLE } from './data';
+import { skillOf } from './data';
 import { statsFor } from './stats';
 
 /** 何体目かごとの総合力のめやす（power を決めていない手下に使う） */
@@ -38,8 +42,8 @@ export interface MinionDef {
 export function minion(chapter: number, slot: number, d: MinionDef, power = d.power ?? MINION_POWER[slot]): Character {
   const { stats } = statsFor(d.bias, power);
   const rank = MINION_RANK[slot]; // ランクの表示は、何体目かで決める（総合力は手下ごとにちがうため）
-  const t = SKILL_TABLE[d.skill[1]];
   const id = `minion-${chapter}-${slot}`;
+  const skill = { name: d.skill[0], kind: d.skill[1], description: d.skill[2] };
   return {
     id,
     seed: id,
@@ -53,14 +57,14 @@ export function minion(chapter: number, slot: number, d: MinionDef, power = d.po
       bias: d.bias,
       parts: { head: d.parts[0], body: d.parts[1], arms: d.parts[2], legs: d.parts[3], back: d.parts[4], weapon: 'none' },
       colors: { primary: d.colors[0], secondary: d.colors[1], accent: d.colors[2], eye: d.colors[3] },
-      skill: { name: d.skill[0], kind: d.skill[1], description: d.skill[2] },
+      skill,
       ultimate: { name: d.ult[0], style: d.ult[1], description: d.ult[2], shout: d.ult[3] },
       trait: d.trait,
       bare: 1,
     },
     stats,
     rank,
-    skill: { kind: d.skill[1], name: d.skill[0], description: d.skill[2], spCost: t.spCost, cooldown: t.cooldown },
+    skill: skillOf(skill),
     createdAt: 0,
     source: 'cpu',
   };
@@ -70,27 +74,27 @@ const b = (hp: number, sp: number, atk: number, def: number): Bias => ({ hp, sp,
 
 // 章ごとの4体（1体目から4体目の順）
 export const MINION_DEFS: MinionDef[][] = [
-  // ── 1章 地（ボス：ドルガイア）：石ころ・モグラ・いのしし・土の人形 ──
+  // ── 1章 地（ボス：ドルガイア）：モグラ（夜）・火打ち石（火）・いのしし・土の人形 ──
   [
     {
-      motif: '石ころ', name: 'イシコロン', title: 'ころがる石ころ',
-      description: '道ばたの石ころから生まれた、小さなロボ。ころころ転がって、体当たりしてくる。',
-      form: 'humanoid', element: 'verdant', bias: b(3, 2, 2, 4), parts: ['mono', 'heavy', 'standard', 'standard', 'none'],
-      colors: ['#8a8070', '#c8bca8', '#6a5a48', '#ffb040'],
-      skill: ['ゴロゴロタックル', 'strike', '体を丸めて、転がりながらぶつかる'],
-      ult: ['ストーン・メテオ', 'meteor', '小石をたくさん、空から落とす', 'ころがれ、ころがれ！'],
-      trait: 'ironwall',
-      power: 88,
-    },
-    {
       motif: 'モグラ', name: 'モグラッド', title: '土の中のあなほり名人',
-      description: 'モグラから生まれたロボ。土の中から急に顔を出して、すばやく打ってくる。',
-      form: 'beast', element: 'verdant', bias: b(2, 3, 4, 2), parts: ['ears', 'slim', 'standard', 'standard', 'none'],
+      description: 'モグラから生まれたロボ。まっくらな土の中から急に顔を出して、すばやく打ってくる。',
+      form: 'beast', element: 'dark', bias: b(2, 3, 4, 2), parts: ['ears', 'slim', 'standard', 'standard', 'none'],
       colors: ['#5a4334', '#d9a88a', '#e8c070', '#ff8a5a'],
       skill: ['ほりほりラッシュ', 'barrage', 'つめのような手で、すばやく三回たたく'],
       ult: ['アンダー・ラッシュ', 'rush', '土の中をほり進み、下から何度も打ち上げる', '土の下から、こんにちは！'],
       trait: 'first',
-      power: 76,
+      power: 75,
+    },
+    {
+      motif: '火打ち石', name: 'イシコロン', title: '火花をちらす石ころ',
+      description: '道ばたの火打ち石から生まれた、小さなロボ。ころころ転がり、火花をちらしながら体当たりしてくる。',
+      form: 'humanoid', element: 'blaze', bias: b(3, 2, 2, 4), parts: ['mono', 'heavy', 'standard', 'standard', 'none'],
+      colors: ['#8a8070', '#ff7a40', '#6a5a48', '#ffb040'],
+      skill: ['ゴロゴロタックル', 'strike', '体を丸めて、転がりながらぶつかる'],
+      ult: ['ストーン・メテオ', 'meteor', '火のついた小石を、空からたくさん落とす', 'ころがれ、ころがれ！'],
+      trait: 'ironwall',
+      power: 93,
     },
     {
       motif: 'いのしし', name: 'ロックボア', title: '岩はだのいのしし',
@@ -100,7 +104,7 @@ export const MINION_DEFS: MinionDef[][] = [
       skill: ['いわくだき', 'breaker', '頭からぶつかって、相手の守りをくずす'],
       ult: ['ボア・ストライク', 'burst', '力をためて、大地ごとはじけとぶ', 'まっすぐ、止まらない！'],
       trait: 'pierce',
-      power: 82,
+      power: 83,
     },
     {
       motif: '土の人形', name: 'ドグウガード', title: '大地の門の見はり番',
@@ -110,15 +114,15 @@ export const MINION_DEFS: MinionDef[][] = [
       skill: ['どろのよろい', 'fortify', '体をどろでかためて、きずをなおす'],
       ult: ['アース・クエイク', 'burst', '地面を強くふみ、大地をゆらす', '門は、通さない！'],
       trait: 'guts',
-      power: 84,
+      power: 83,
     },
   ],
-  // ── 2章 水（ボス：シズクレア）：しずく・カエル・雪だるま・こおった湖 ──
+  // ── 2章 水（ボス：シズクレア）：しずく（風）・カエル（地）・雪だるま・こおった湖 ──
   [
     {
-      motif: '雨のしずく', name: 'シズクン', title: '雨上がりのしずく',
-      description: '雨のしずくから生まれた、小さなロボ。ふわふわうかんで、水のたまを打ってくる。',
-      form: 'floater', element: 'tide', bias: b(2, 4, 3, 2), parts: ['crest', 'slim', 'standard', 'standard', 'wings'],
+      motif: '雨のしずく', name: 'シズクン', title: '風にのるしずく',
+      description: '雨のしずくから生まれた、小さなロボ。風にのってふわふわ飛び、水のたまを打ってくる。',
+      form: 'floater', element: 'gale', bias: b(2, 4, 3, 2), parts: ['crest', 'slim', 'standard', 'standard', 'wings'],
       colors: ['#bfe8ff', '#3aa0e8', '#ffffff', '#40e0ff'],
       skill: ['ぽつぽつショット', 'barrage', '水のたまを、三回続けて打つ'],
       ult: ['レイン・ビーム', 'beam', '雨雲から、水の光線を打ち下ろす', 'ぽつぽつ、ざーざー！'],
@@ -126,14 +130,14 @@ export const MINION_DEFS: MinionDef[][] = [
       power: 91,
     },
     {
-      motif: 'カエル', name: 'ケロッパ', title: '池のジャンプ名人',
-      description: 'カエルから生まれたロボ。大きくジャンプして、上からふみつけてくる。',
-      form: 'beast', element: 'tide', bias: b(3, 3, 3, 2), parts: ['ears', 'standard', 'standard', 'thruster', 'none'],
+      motif: 'カエル', name: 'ケロッパ', title: '田んぼのジャンプ名人',
+      description: 'カエルから生まれたロボ。どろの田んぼから大きくジャンプして、上からふみつけてくる。',
+      form: 'beast', element: 'verdant', bias: b(3, 3, 3, 2), parts: ['ears', 'standard', 'standard', 'thruster', 'none'],
       colors: ['#3aa060', '#a8e080', '#f0d040', '#ffef60'],
       skill: ['ケロケロキック', 'strike', '高くとび上がって、力いっぱいけりこむ'],
       ult: ['ジャンピング・ラッシュ', 'rush', '何度もはねて、上から打ちつける', 'ケロケロ、ぴょーん！'],
       trait: 'evade',
-      power: 84,
+      power: 85,
     },
     {
       motif: '雪だるま', name: 'ユキダルン', title: '雪原の見はり',
@@ -143,7 +147,7 @@ export const MINION_DEFS: MinionDef[][] = [
       skill: ['ひえひえタッチ', 'hex', '冷たい手でさわって、相手の力をうばう'],
       ult: ['スノー・メテオ', 'meteor', '大きな雪玉を、空から落とす', '雪にうもれてしまえ！'],
       trait: 'regen',
-      power: 89,
+      power: 91,
     },
     {
       motif: 'こおった湖', name: 'フロストガード', title: 'こおれる湖の兵士',
@@ -156,8 +160,18 @@ export const MINION_DEFS: MinionDef[][] = [
       power: 92,
     },
   ],
-  // ── 3章 火（ボス：バーンハウンド）：マッチ・トカゲ・やかん・火柱 ──
+  // ── 3章 火（ボス：バーンハウンド）：トカゲ（地）・マッチ・やかん（水）・火柱 ──
   [
+    {
+      motif: 'トカゲ', name: 'ヒトカゲン', title: '火山の岩場のトカゲ',
+      description: 'トカゲから生まれたロボ。火山のふもとの岩場を走り回り、かたいあごでかみついてくる。',
+      form: 'beast', element: 'verdant', bias: b(3, 3, 3, 2), parts: ['horns', 'slim', 'standard', 'standard', 'none'],
+      colors: ['#8a5a34', '#d0a060', '#ffd040', '#ffff80'],
+      skill: ['ロックバイト', 'drain', 'かたいあごでかみついて、相手の力をすいとる'],
+      ult: ['ストーン・ビーム', 'beam', '口から、すなと石の光線をはく', 'ゴツゴツ、ガリガリ！'],
+      trait: 'grit',
+      power: 79,
+    },
     {
       motif: 'マッチぼう', name: 'マッチボー', title: '小さな火の兵',
       description: 'マッチぼうから生まれた、ほそいロボ。頭の火で、相手をあぶってくる。',
@@ -166,27 +180,17 @@ export const MINION_DEFS: MinionDef[][] = [
       skill: ['シュッとファイア', 'strike', '頭をこすって、大きな火を出す'],
       ult: ['マッチ・バースト', 'burst', '体じゅうの火を、一気にはじけさせる', 'もえろ、もえろ！'],
       trait: 'first',
-      power: 66,
+      power: 73,
     },
     {
-      motif: 'トカゲ', name: 'ヒトカゲン', title: '火山のトカゲ',
-      description: 'トカゲから生まれたロボ。あつい岩の上を走り回り、火をはいてくる。',
-      form: 'beast', element: 'blaze', bias: b(3, 3, 3, 2), parts: ['horns', 'slim', 'standard', 'standard', 'none'],
-      colors: ['#c04020', '#ff9a40', '#ffd040', '#ffff80'],
-      skill: ['ほのおのいき', 'drain', '火のいきをはいて、相手の力をすいとる'],
-      ult: ['サラマンダー・ビーム', 'beam', '口から、ほのおの光線をはく', 'あつい、あつい！'],
-      trait: 'grit',
-      power: 82,
-    },
-    {
-      motif: 'やかん', name: 'ヤカンダー', title: 'わきたつやかん',
-      description: 'やかんから生まれた、ずんぐりしたロボ。湯気をふき上げて、力をためる。',
-      form: 'humanoid', element: 'blaze', bias: b(4, 3, 3, 3), parts: ['mono', 'heavy', 'heavy', 'heavy', 'boosters'],
+      motif: 'やかん', name: 'ヤカンダー', title: 'お湯がわきたつやかん',
+      description: 'やかんから生まれた、ずんぐりしたロボ。中のお湯をわかし、湯気をふき上げて、力をためる。',
+      form: 'humanoid', element: 'tide', bias: b(4, 3, 3, 3), parts: ['mono', 'heavy', 'heavy', 'heavy', 'boosters'],
       colors: ['#b8c0c8', '#e04020', '#303840', '#ff6040'],
       skill: ['ふっとうチャージ', 'powerup', 'お湯をわかして、力をためる'],
       ult: ['スチーム・バースト', 'burst', 'ためた湯気を、一気にふき出す', 'ピーッ！ わいたぞ！'],
       trait: 'fighter',
-      power: 86,
+      power: 83,
     },
     {
       motif: '火柱', name: 'ヒバシラー', title: 'ふき上がる火柱',
@@ -196,20 +200,30 @@ export const MINION_DEFS: MinionDef[][] = [
       skill: ['ファイアウォール', 'fortify', '火のかべを作って、体を休める'],
       ult: ['ボルケーノ・メテオ', 'meteor', '火山の岩を、まっ赤にして落とす', 'ふき上がれ！'],
       trait: 'pierce',
-      power: 91,
+      power: 92,
     },
   ],
-  // ── 4章 風（ボス：ゲイルビート）：わた毛・風車・トンボ・はやぶさ ──
+  // ── 4章 風（ボス：ゲイルビート）：トンボ（水）・わた毛（地）・風車・はやぶさ ──
   [
     {
-      motif: 'たんぽぽのわた毛', name: 'ワタゲン', title: '風にのるわた毛',
-      description: 'たんぽぽのわた毛から生まれた、軽いロボ。ふわりとよけて、また飛んでくる。',
-      form: 'floater', element: 'gale', bias: b(2, 4, 2, 3), parts: ['crown', 'slim', 'standard', 'standard', 'wings'],
+      motif: 'トンボ', name: 'トンボルト', title: '池の上のトンボ',
+      description: 'トンボから生まれた、すばやいロボ。池の上で止まり、急に向きを変えて、水しぶきを上げてせまる。',
+      form: 'beast', element: 'tide', bias: b(2, 3, 4, 2), parts: ['mono', 'slim', 'blade', 'thruster', 'wings'],
+      colors: ['#2a6a8a', '#60e0c0', '#d0f080', '#80ffff'],
+      skill: ['すいすいスラッシュ', 'strike', '空を一直線に飛んで、すれちがいざまに打つ'],
+      ult: ['ドラゴンフライ・ラッシュ', 'rush', '目にも止まらない速さで、何度も打つ', 'ついてこられるか！'],
+      trait: 'first',
+      power: 72,
+    },
+    {
+      motif: 'たんぽぽのわた毛', name: 'ワタゲン', title: '野原のわた毛',
+      description: 'たんぽぽのわた毛から生まれた、軽いロボ。野原からふわりと飛び立ち、よけては、また飛んでくる。',
+      form: 'floater', element: 'verdant', bias: b(2, 4, 2, 3), parts: ['crown', 'slim', 'standard', 'standard', 'wings'],
       colors: ['#f4f4e8', '#a8e0c0', '#f0d040', '#80ffd0'],
-      skill: ['ふわふわヒール', 'heal', '風にのって、体を休める'],
+      skill: ['ふわふわヒール', 'heal', '野原におりて、体を休める'],
       ult: ['ワタゲ・ストーム', 'rush', 'わた毛をたくさん飛ばして、つつみこむ', 'ふわっと、とんでいけ！'],
       trait: 'evade',
-      power: 89,
+      power: 92,
     },
     {
       motif: '風車', name: 'カザグルン', title: 'くるくる風車',
@@ -219,17 +233,7 @@ export const MINION_DEFS: MinionDef[][] = [
       skill: ['くるくるカッター', 'barrage', '回る羽で、三回続けて切りつける'],
       ult: ['トルネード・ビーム', 'beam', '大きなたつまきを、まっすぐ打ち出す', '回れ、回れ！'],
       trait: 'fighter',
-      power: 86,
-    },
-    {
-      motif: 'トンボ', name: 'トンボルト', title: 'すいすいトンボ',
-      description: 'トンボから生まれた、すばやいロボ。空中で止まり、急に向きを変えてせまる。',
-      form: 'beast', element: 'gale', bias: b(2, 3, 4, 2), parts: ['mono', 'slim', 'blade', 'thruster', 'wings'],
-      colors: ['#2a6a8a', '#60e0c0', '#d0f080', '#80ffff'],
-      skill: ['すいすいスラッシュ', 'strike', '空を一直線に飛んで、すれちがいざまに打つ'],
-      ult: ['ドラゴンフライ・ラッシュ', 'rush', '目にも止まらない速さで、何度も打つ', 'ついてこられるか！'],
-      trait: 'first',
-      power: 81,
+      power: 91,
     },
     {
       motif: 'はやぶさ', name: 'ハヤブサー', title: '空をかけるはやぶさ',
@@ -239,30 +243,30 @@ export const MINION_DEFS: MinionDef[][] = [
       skill: ['ダイブアタック', 'breaker', '空から急にまいおりて、守りをくずす'],
       ult: ['ファルコン・スラッシュ', 'slash', '風を切って、大きく切り上げる', '風より速く！'],
       trait: 'pierce',
-      power: 84,
+      power: 83,
     },
   ],
-  // ── 5章 光（ボス：ピカリオン）：ホタル・電球・かがみ・ひまわり ──
+  // ── 5章 光（ボス：ピカリオン）：ホタル（夜）・電球（火）・かがみ・ひまわり ──
   [
     {
       motif: 'ホタル', name: 'ホタルン', title: '夏の夜のホタル',
-      description: 'ホタルから生まれた、小さなロボ。おしりの光で、相手の目をくらませる。',
-      form: 'floater', element: 'light', bias: b(2, 4, 3, 2), parts: ['ears', 'slim', 'standard', 'standard', 'wings'],
+      description: 'ホタルから生まれた、小さなロボ。夜のやみにかくれて、おしりの光で相手の目をくらませる。',
+      form: 'floater', element: 'dark', bias: b(2, 4, 3, 2), parts: ['ears', 'slim', 'standard', 'standard', 'wings'],
       colors: ['#2a2a20', '#f0f060', '#a0e040', '#ffff80'],
       skill: ['ちかちかライト', 'hex', '光をちかちかさせて、相手の力を弱める'],
       ult: ['ホタル・ビーム', 'beam', 'ためた光を、まっすぐ打ち出す', 'ぴかっ！'],
       trait: 'focus',
-      power: 100,
+      power: 101,
     },
     {
-      motif: '電球', name: 'ピカデン', title: 'ぴかぴか電球',
-      description: '電球から生まれたロボ。頭の電球をつけて、力をためる。',
-      form: 'humanoid', element: 'light', bias: b(3, 3, 3, 3), parts: ['mono', 'standard', 'standard', 'standard', 'boosters'],
-      colors: ['#f8f0c0', '#ffd040', '#c0c8d0', '#ffffa0'],
+      motif: '電球', name: 'ピカデン', title: 'あつあつ電球',
+      description: '電球から生まれたロボ。頭の電球をあつく光らせて、力をためる。',
+      form: 'humanoid', element: 'blaze', bias: b(3, 3, 3, 3), parts: ['mono', 'standard', 'standard', 'standard', 'boosters'],
+      colors: ['#f8f0c0', '#ff7a30', '#c0c8d0', '#ffffa0'],
       skill: ['スイッチオン', 'powerup', 'スイッチを入れて、力をいっぱいにする'],
       ult: ['フラッシュ・バースト', 'burst', 'まぶしい光を、一気にはじけさせる', 'まぶしいだろう！'],
       trait: 'lucky',
-      power: 88,
+      power: 81,
     },
     {
       motif: 'かがみ', name: 'ミラーン', title: '光を返すかがみ',
@@ -282,20 +286,20 @@ export const MINION_DEFS: MinionDef[][] = [
       skill: ['サンシャイン', 'heal', '太陽の光をあびて、きずをなおす'],
       ult: ['ソーラー・ラッシュ', 'rush', '太陽の光をこぶしにこめて、何度も打つ', 'お日さま、力をかして！'],
       trait: 'regen',
-      power: 87,
+      power: 83,
     },
   ],
-  // ── 6章 夜（ボス：ジャックランプ）：コウモリ・黒ねこ・フクロウ・おばけ ──
+  // ── 6章 夜（ボス：ジャックランプ）：コウモリ（風）・黒ねこ・フクロウ（地）・おばけ ──
   [
     {
-      motif: 'コウモリ', name: 'コウモリン', title: '夜空のコウモリ',
-      description: 'コウモリから生まれたロボ。暗やみを飛び回り、相手の力をすいとる。',
-      form: 'floater', element: 'dark', bias: b(3, 3, 3, 2), parts: ['ears', 'slim', 'standard', 'standard', 'wings'],
+      motif: 'コウモリ', name: 'コウモリン', title: '夜風にのるコウモリ',
+      description: 'コウモリから生まれたロボ。夜風にのって飛び回り、相手の力をすいとる。',
+      form: 'floater', element: 'gale', bias: b(3, 3, 3, 2), parts: ['ears', 'slim', 'standard', 'standard', 'wings'],
       colors: ['#2a2030', '#7a4aa0', '#c0a0e0', '#ff4060'],
       skill: ['チュウチュウドレイン', 'drain', 'かみついて、相手の力をすいとる'],
       ult: ['バット・ラッシュ', 'rush', '仲間をよんで、いっせいにおそう', '夜は、ぼくらの時間！'],
       trait: 'evade',
-      power: 82,
+      power: 79,
     },
     {
       motif: '黒ねこ', name: 'クロニャン', title: '夜道の黒ねこ',
@@ -305,17 +309,17 @@ export const MINION_DEFS: MinionDef[][] = [
       skill: ['ニャンニャンひっかき', 'barrage', 'すばやく、三回ひっかく'],
       ult: ['シャドウ・スラッシュ', 'slash', 'かげにまぎれて、うしろから切りつける', 'ニャーオ！'],
       trait: 'first',
-      power: 80,
+      power: 79,
     },
     {
       motif: 'フクロウ', name: 'ホーホウル', title: '森の夜番',
-      description: 'フクロウから生まれたロボ。大きな目で、相手の動きを見ぬく。',
-      form: 'floater', element: 'dark', bias: b(3, 4, 3, 3), parts: ['crest', 'standard', 'standard', 'standard', 'wings'],
+      description: 'フクロウから生まれたロボ。森の木の上から、大きな目で相手の動きを見ぬく。',
+      form: 'floater', element: 'verdant', bias: b(3, 4, 3, 3), parts: ['crest', 'standard', 'standard', 'standard', 'wings'],
       colors: ['#5a4434', '#a88a6a', '#e0c080', '#ffb020'],
       skill: ['ミッドナイトアイ', 'hex', '大きな目でにらんで、相手の力をうばう'],
       ult: ['ムーンレス・ビーム', 'beam', '月の出ない夜の、黒い光をはなつ', 'ホーホー、見えているよ。'],
       trait: 'focus',
-      power: 104,
+      power: 103,
     },
     {
       motif: 'おばけ', name: 'オバケット', title: 'やしきのおばけ',
@@ -325,10 +329,10 @@ export const MINION_DEFS: MinionDef[][] = [
       skill: ['うらめしタッチ', 'breaker', 'すうっと通りぬけて、守りをくずす'],
       ult: ['ゴースト・バースト', 'burst', '体をふくらませて、一気にはじける', 'ばあっ！'],
       trait: 'guts',
-      power: 93,
+      power: 94,
     },
   ],
-  // ── 7章 森（地。ボス：バンブーン）：どんぐり・キノコ・きつつき・クワガタ ──
+  // ── 7章 森（地。ボス：バンブーン）：どんぐり・キノコ（夜）・きつつき（風）・クワガタ ──
   [
     {
       motif: 'どんぐり', name: 'ドングリン', title: '落ち葉の中のどんぐり',
@@ -338,17 +342,17 @@ export const MINION_DEFS: MinionDef[][] = [
       skill: ['どんぐりアタック', 'strike', 'かたい頭で、思いきりぶつかる'],
       ult: ['ナッツ・メテオ', 'meteor', 'どんぐりの雨を、空からふらせる', 'ころころ、どーん！'],
       trait: 'ironwall',
-      power: 80,
+      power: 82,
     },
     {
-      motif: 'キノコ', name: 'キノコロン', title: '森のキノコ',
-      description: 'キノコから生まれた、ずんぐりしたロボ。ふしぎなこなをまいて、相手を弱らせる。',
-      form: 'humanoid', element: 'verdant', bias: b(4, 3, 2, 3), parts: ['mono', 'heavy', 'standard', 'heavy', 'none'],
+      motif: 'キノコ', name: 'キノコロン', title: '森のおくのキノコ',
+      description: 'キノコから生まれた、ずんぐりしたロボ。暗い森のおくで、ふしぎなこなをまいて、相手を弱らせる。',
+      form: 'humanoid', element: 'dark', bias: b(4, 3, 2, 3), parts: ['mono', 'heavy', 'standard', 'heavy', 'none'],
       colors: ['#e8e0d0', '#d03030', '#f8f0e0', '#ffe080'],
       skill: ['ほうしパウダー', 'hex', 'ふしぎなこなをまいて、相手の力を弱める'],
       ult: ['マッシュルーム・バースト', 'burst', 'かさをふくらませて、一気にはじける', 'ぽふっ！'],
       trait: 'regen',
-      power: 86,
+      power: 92,
     },
     {
       motif: 'きつつき', name: 'キツツキー', title: '木をたたく音',
@@ -371,22 +375,22 @@ export const MINION_DEFS: MinionDef[][] = [
       power: 83,
     },
   ],
-  // ── 8章 海（水。ボス：タイダロン）：クラゲ・カニ・タコ・サメ ──
+  // ── 8章 海（水。ボス：タイダロン）：クラゲ（光）・カニ（地）・タコ・サメ ──
   [
     {
-      motif: 'クラゲ', name: 'クラゲン', title: 'ゆらゆらクラゲ',
-      description: 'クラゲから生まれた、すきとおったロボ。ゆらゆらとうかび、しびれる手でさわる。',
-      form: 'floater', element: 'tide', bias: b(3, 4, 3, 2), parts: ['crown', 'slim', 'standard', 'standard', 'cape'],
+      motif: 'クラゲ', name: 'クラゲン', title: '光るクラゲ',
+      description: 'クラゲから生まれた、すきとおったロボ。体を光らせてゆらゆらとうかび、しびれる手でさわる。',
+      form: 'floater', element: 'light', bias: b(3, 4, 3, 2), parts: ['crown', 'slim', 'standard', 'standard', 'cape'],
       colors: ['#c0e0ff', '#c080ff', '#ffffff', '#ff80ff'],
       skill: ['びりびりタッチ', 'drain', 'しびれる手でさわって、力をすいとる'],
       ult: ['ジェリー・ビーム', 'beam', '体じゅうを光らせて、光線をはなつ', 'ゆらゆら、びりびり！'],
       trait: 'evade',
-      power: 85,
+      power: 90,
     },
     {
       motif: 'カニ', name: 'シオガニー', title: '岩場のカニ',
       description: 'カニから生まれた、かたいこうらのロボ。横歩きでせまり、大きなはさみで打つ。',
-      form: 'beast', element: 'tide', bias: b(3, 2, 3, 4), parts: ['mono', 'heavy', 'heavy', 'heavy', 'none'],
+      form: 'beast', element: 'verdant', bias: b(3, 2, 3, 4), parts: ['mono', 'heavy', 'heavy', 'heavy', 'none'],
       colors: ['#d04030', '#f0a080', '#f0e0c0', '#202020'],
       skill: ['チョキチョキカウンター', 'counter', 'はさみで受け止めて、はさみ返す'],
       ult: ['クラブ・ラッシュ', 'rush', '両手のはさみで、何度もはさむ', 'チョキチョキ！'],
@@ -401,7 +405,7 @@ export const MINION_DEFS: MinionDef[][] = [
       skill: ['すみはき', 'hex', '黒いすみをはいて、相手の力を弱める'],
       ult: ['オクトパス・ラッシュ', 'rush', '八本の手で、続けて打つ', 'にゅるにゅる、ぺしぺし！'],
       trait: 'lucky',
-      power: 93,
+      power: 95,
     },
     {
       motif: 'サメ', name: 'シャークス', title: '海の大きなサメ',
@@ -411,10 +415,10 @@ export const MINION_DEFS: MinionDef[][] = [
       skill: ['ガブリンチョ', 'strike', '大きな口で、思いきりかみつく'],
       ult: ['シャーク・ストライク', 'slash', '海の中から、一気にとび出して切りさく', 'ねらった えものは、にがさない！'],
       trait: 'first',
-      power: 73,
+      power: 75,
     },
   ],
-  // ── 9章 月（光。ボス：ルミナス）：月見だんご・月のうさぎ・星くず・流れ星 ──
+  // ── 9章 月（光。ボス：ルミナス）：月見だんご・月のうさぎ・星くず（夜）・流れ星（火） ──
   [
     {
       motif: '月見だんご', name: 'ダンゴロン', title: '月見のおだんご',
@@ -434,7 +438,7 @@ export const MINION_DEFS: MinionDef[][] = [
       skill: ['ぴょんぴょんキック', 'barrage', 'はねながら、三回続けてける'],
       ult: ['ラビット・ラッシュ', 'rush', '月までとどくほどはねて、何度もける', 'ぴょーん！'],
       trait: 'evade',
-      power: 86,
+      power: 87,
     },
     {
       motif: '星くず', name: 'ホシクズン', title: '夜空の星くず',
@@ -447,14 +451,14 @@ export const MINION_DEFS: MinionDef[][] = [
       power: 95,
     },
     {
-      motif: '流れ星', name: 'メテオラン', title: 'かけぬける流れ星',
-      description: '流れ星から生まれたロボ。三日月の見はり番の手下で、夜空をまっすぐかけぬける。',
-      form: 'floater', element: 'light', bias: b(3, 3, 5, 2), parts: ['vfin', 'slim', 'standard', 'thruster', 'boosters'],
-      colors: ['#283060', '#ffd860', '#ffffff', '#a0f0ff'],
+      motif: '流れ星', name: 'メテオラン', title: 'もえる流れ星',
+      description: '流れ星から生まれたロボ。三日月の見はり番の手下で、もえながら夜空をまっすぐかけぬける。',
+      form: 'floater', element: 'blaze', bias: b(3, 3, 5, 2), parts: ['vfin', 'slim', 'standard', 'thruster', 'boosters'],
+      colors: ['#283060', '#ff7040', '#ffffff', '#a0f0ff'],
       skill: ['シューティングスター', 'strike', '流れ星のように、まっすぐぶつかる'],
       ult: ['ミーティア・メテオ', 'meteor', '流れ星を、たくさんふらせる', 'ねがいごとを、どうぞ！'],
       trait: 'fighter',
-      power: 85,
+      power: 87,
     },
   ],
 ];

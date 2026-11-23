@@ -1,4 +1,6 @@
-import type { Element, Form, SkillKind, Trait, UltStyle, WeaponType } from './types';
+import {
+  ELEMENTS, type CharacterSpec, type Element, type Form, type SkillDef, type SkillKind, type Trait, type UltStyle, type WeaponType,
+} from './types';
 
 export const FORM_INFO: Record<Form, { label: string; en: string }> = {
   humanoid: { label: '人型', en: 'HUMANOID' },
@@ -45,11 +47,27 @@ export function elementMultiplier(a: Element, d: Element): number {
   return 1;
 }
 
+/** その属性の相手に、大きなダメージをあたえられる属性 */
+export const strongAgainst = (d: Element): Element[] => ELEMENTS.filter((a) => STRONG[a].includes(d));
+
+/**
+ * その属性の相手について、ストーリーの画面に出す「有利な属性」の説明。
+ * 光と夜は、おたがいに大きなダメージ（どちらも1.3倍）なので「有利」とは言わない
+ */
+export function advantageText(d: Element): string {
+  const list = strongAgainst(d);
+  if (!list.length) return '';
+  const names = list.map((e) => ELEMENT_INFO[e].label).join('・');
+  return list.every((a) => STRONG[d].includes(a))
+    ? `${names}のロボは、おたがいに大ダメージ（どちらも強く打てる）。`
+    : `${names}のロボが有利です。`;
+}
+
 export const SKILL_TABLE: Record<
   SkillKind,
   { label: string; spCost: number; cooldown: number; effect: string; damaging: boolean }
 > = {
-  strike: { label: '強打', spCost: 50, cooldown: 2, effect: '2倍のパワーで、思いきり打つ', damaging: true },
+  strike: { label: '強打', spCost: 50, cooldown: 2, effect: '1.9倍のパワーで、思いきり打つ', damaging: true },
   barrage: { label: '連打', spCost: 55, cooldown: 2, effect: '0.65倍のパワーで、3回続けて打つ', damaging: true },
   drain: { label: 'ドレイン', spCost: 50, cooldown: 2, effect: '1.4倍のパワーで打ち、あたえたダメージの半分だけHPが回復', damaging: true },
   breaker: {
@@ -59,13 +77,13 @@ export const SKILL_TABLE: Record<
     effect: '1.5倍のパワーで、守りをつきやぶる。相手のぼうぎょを3ターン30%下げる',
     damaging: true,
   },
-  heal: { label: '回復', spCost: 60, cooldown: 3, effect: 'HPを、最大の27%だけ回復', damaging: false },
-  powerup: { label: 'パワーアップ', spCost: 40, cooldown: 3, effect: '3ターンのあいだ、こうげきが60%上がる。必殺ゲージ+25', damaging: false },
+  heal: { label: '回復', spCost: 60, cooldown: 3, effect: 'HPを、最大の31%だけ回復', damaging: false },
+  powerup: { label: 'パワーアップ', spCost: 40, cooldown: 3, effect: '3ターンのあいだ、こうげきが70%上がる。必殺ゲージ+25', damaging: false },
   fortify: {
     label: 'ガードアップ',
     spCost: 40,
     cooldown: 3,
-    effect: '3ターンのあいだ、ぼうぎょが60%上がる。HPも17%回復',
+    effect: '3ターンのあいだ、ぼうぎょが60%上がる。HPも17%回復。必殺ゲージ+15',
     damaging: false,
   },
   hex: { label: 'のろい', spCost: 45, cooldown: 2, effect: '0.9倍のパワーで打ち、相手のこうげきを3ターン30%下げる', damaging: true },
@@ -78,9 +96,15 @@ export const SKILL_TABLE: Record<
   },
 };
 
+/** 設計図のスキル（名前・種類・説明）に、使う SP と休むターンを付ける */
+export function skillOf(s: CharacterSpec['skill']): SkillDef {
+  const t = SKILL_TABLE[s.kind];
+  return { kind: s.kind, name: s.name, description: s.description, spCost: t.spCost, cooldown: t.cooldown };
+}
+
 export const TRAIT_TABLE: Record<Trait, { label: string; en: string; effect: string }> = {
-  first: { label: '先手', en: 'FIRST STRIKE', effect: '先に動ける。最初のアタックは1.5倍のパワー' },
-  guts: { label: 'ど根性', en: 'GUTS', effect: '1度だけ、たおれるダメージでもHP1でふみとどまる' },
+  first: { label: '先手', en: 'FIRST STRIKE', effect: '先に動ける。最初に当てるこうげきは1.5倍のパワー' },
+  guts: { label: 'ど根性', en: 'GUTS', effect: '一度だけ、たおれるダメージでもHP1でふみとどまる' },
   pierce: { label: 'つらぬき', en: 'PIERCE', effect: '相手のぼうぎょを25%無視する' },
   regen: { label: '自動回復', en: 'REGEN', effect: '自分の番が来るたびに、最大HPの1.8%を回復' },
   focus: { label: '集中', en: 'FOCUS', effect: 'SPが2倍たまる。スキルのパワー1.35倍' },

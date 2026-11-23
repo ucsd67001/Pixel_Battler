@@ -34,6 +34,7 @@ export class Stage {
   private down = [false, false];
   private clock = new THREE.Clock();
   private raf = 0;
+  private disposed = false; // 片づけたあとは、もう描かない（WebGL を返したあとに描くと、エラーになる）
   private ro: ResizeObserver;
   private timeScale = 1;
   speed = 1;
@@ -71,8 +72,10 @@ export class Stage {
     s.background = this.bg.clone();
     s.fog = new THREE.FogExp2('#060a16', mode === 'battle' ? 0.045 : 0.06);
     const pmrem = new THREE.PMREMGenerator(r);
-    s.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    const room = new RoomEnvironment();
+    s.environment = pmrem.fromScene(room, 0.04).texture;
     s.environmentIntensity = 0.55;
+    room.dispose(); // 光の映りこみを作るためだけの部屋。作ったら、すぐ返す
     pmrem.dispose();
 
     this.hemi = new THREE.HemisphereLight('#9ab8ff', '#22132e', 0.75);
@@ -259,6 +262,7 @@ export class Stage {
   }
 
   private loop = () => {
+    if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
     const raw = Math.min(0.05, this.clock.getDelta());
     const dt = raw * this.timeScale * this.speed;
@@ -290,21 +294,30 @@ export class Stage {
   };
 
   dispose() {
+    this.disposed = true;
     cancelAnimationFrame(this.raf);
     clearTimeout(this.stopTimer);
     this.ro.disconnect();
     this.tw.clear();
     this.fx.clear();
     this.clearRobots();
+    // GPU に置いたもの（形・材質・絵・光の映りこみ）を全部返す。画面を行き来しても、スマホのメモリーがたまらないように
+    const disposeMat = (mat: THREE.Material) => {
+      for (const v of Object.values(mat)) if ((v as THREE.Texture | null)?.isTexture) (v as THREE.Texture).dispose();
+      mat.dispose();
+    };
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh;
       m.geometry?.dispose();
       const mat = m.material as THREE.Material | THREE.Material[] | undefined;
-      if (Array.isArray(mat)) mat.forEach((x) => x.dispose());
-      else mat?.dispose();
+      if (Array.isArray(mat)) mat.forEach(disposeMat);
+      else if (mat) disposeMat(mat);
     });
+    this.scene.environment?.dispose();
     this.composer.dispose();
     this.renderer.dispose();
+    // WebGL の場所もすぐ返す（スマホのブラウザは、同時に使える数が少ない）
+    this.renderer.forceContextLoss();
     this.renderer.domElement.remove();
   }
 

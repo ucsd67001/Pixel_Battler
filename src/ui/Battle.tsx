@@ -244,8 +244,8 @@ export function Battle({
     patch(h.target, { hp: h.hpAfter });
     popup(h.target, String(h.amount), h.crit ? 'crit' : 'dmg');
     if (h.guts) popup(h.target, 'ど根性！ HP1でふみとどまった', 'good', 40);
-    else if (h.crit) popup(h.target, 'CRITICAL!', 'info', 40);
-    else if (h.guarded) popup(h.target, 'GUARD', 'info', 40);
+    else if (h.crit) popup(h.target, '会心の一打！', 'info', 40);
+    else if (h.guarded) popup(h.target, 'ガード', 'info', 40);
     else if (h.eff > 1) popup(h.target, '効果ばつぐん！', 'good', 40);
     else if (h.eff < 1) popup(h.target, 'いまひとつ…', 'bad', 40);
     stage.current?.hit(h.target, { crit: h.crit, guarded: h.guarded, big });
@@ -267,7 +267,7 @@ export function Battle({
         break;
       case 'guard':
         setMsg(res.heal?.amount ? `${A.spec.name} は ガードして 体勢を立て直した` : `${A.spec.name} は ガードしている`);
-        popup(a, 'GUARD', 'info');
+        popup(a, 'ガード', 'info');
         await s.guard(a);
         break;
       case 'skill': {
@@ -303,7 +303,7 @@ export function Battle({
     }
     if (res.counterHit && alive.current) {
       setMsg(`${chars[d].spec.name} の カウンター！`);
-      popup(d, 'COUNTER!', 'info', 20);
+      popup(d, 'カウンター！', 'info', 20);
       await s.counterStrike(d, () => applyHit(res.counterHit!));
     }
     syncAll();
@@ -539,7 +539,7 @@ export function Battle({
               <span className="cmd-sub">
                 {me.cooldown > 0
                   ? `あと${me.cooldown}ターン`
-                  : `SP ${player.skill.spCost} ・ ${SKILL_TABLE[player.skill.kind].label}`}
+                  : `${SKILL_TABLE[player.skill.kind].label} ・ SP ${player.skill.spCost}`}
               </span>
             </button>
             <button className={`cmd ult${ultReady ? ' ready' : ''}`} data-sfx="select" disabled={!cmdOn || !ultReady} onClick={() => choose('ultimate')}>

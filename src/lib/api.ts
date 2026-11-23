@@ -10,14 +10,44 @@ export interface Health {
   auth: boolean;
 }
 
-export async function checkHealth(): Promise<Health> {
-  try {
-    const r = await fetch('/api/health');
-    if (!r.ok) return { ai: false, model: '', auth: false };
-    return await r.json();
-  } catch {
-    return { ai: false, model: '', auth: false };
-  }
+const NO_HEALTH: Health = { ai: false, model: '', auth: false };
+let health: Promise<Health> | null = null;
+
+/** サーバーの様子を聞く。答えがもらえたら、それをおぼえておく（写真から作る画面を開くたびに待たせないように） */
+export function checkHealth(): Promise<Health> {
+  health ??= (async () => {
+    try {
+      const r = await fetch('/api/health');
+      if (r.ok) return (await r.json()) as Health;
+    } catch {
+      // つながらないとき
+    }
+    health = null; // 聞けなかったら、次にまた聞く
+    return NO_HEALTH;
+  })();
+  return health;
+}
+
+/**
+ * サーバーの窓口に POST する。ログインしていれば、その印（ID トークン）を付ける。
+ * needLogin のときは、ログインしていなければ送らずに失敗にする
+ */
+export async function postApi(
+  path: string,
+  body?: unknown,
+  opt: { needLogin?: boolean; signal?: AbortSignal } = {},
+): Promise<Response> {
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const token = await idToken().catch(() => null);
+  if (token) headers.Authorization = `Bearer ${token}`;
+  else if (opt.needLogin) throw new Error('login required');
+  return fetch(path, {
+    method: 'POST',
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: opt.signal,
+  });
 }
 
 // ログインや許可の問題で作れなかったとき（色だけで作る予備の道に回さない）
@@ -31,15 +61,7 @@ export async function analyze(image: string, hash: string): Promise<{ spec: Char
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 90000);
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    const token = await idToken();
-    if (token) headers.Authorization = `Bearer ${token}`;
-    const r = await fetch('/api/analyze', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ image, hash }),
-      signal: ctrl.signal,
-    });
+    const r = await postApi('/api/analyze', { image, hash }, { signal: ctrl.signal });
     const data = await r.json().catch(() => ({}));
     if (r.status === 401) throw new AccessError(401, 'Google でログインしてください。');
     if (r.status === 403) throw new AccessError(403, 'このアカウントでは、写真から作れません（メールアドレスの確認が済んだ Google アカウントが要ります）。');

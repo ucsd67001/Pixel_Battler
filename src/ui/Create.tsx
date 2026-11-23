@@ -16,7 +16,7 @@ const SCAN_LINES = [
   'いちばん目立つものを探しています',
   'モチーフを決めています',
   'フレームを組み立てています',
-  '武器を選んでいます',
+  '技を考えています',
   'パワーを調整しています',
   '最終チェック中',
 ];
@@ -115,7 +115,7 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
           <button className="btn ghost small" onClick={onBack}>
             ◀ もどる
           </button>
-          <span className="bar-title">NEW GEAR</span>
+          <span className="bar-title">NEW ROBOT</span>
           {user && (
             <button className="btn ghost small bar-right" onClick={() => logout()}>
               {user.displayName ?? user.email} ・ ログアウト
@@ -125,7 +125,7 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
         {needLogin ? (
           <div className="dropzone login-panel">
             <div className="dz-main">Google でログイン</div>
-            <div className="dz-sub">写真から作るには、Google でログインしてください（一人一日10回まで）。</div>
+            <div className="dz-sub">写真から作るには、Google でログインしてください（一日に作れる回数には、上限があります）。</div>
             <button
               className="btn primary big"
               onClick={() => {
@@ -216,7 +216,7 @@ export function Create({ onFight, onBack }: { onFight: (c: Character) => void; o
         <button className="btn ghost small" onClick={onBack}>
           ◀ タイトル
         </button>
-        <span className="bar-title">GEAR COMPLETE</span>
+        <span className="bar-title">ROBOT COMPLETE</span>
       </header>
       <div className="split">
         <div className="split-stage">

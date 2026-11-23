@@ -14,11 +14,12 @@ import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore, type DocumentReference } from 'firebase-admin/firestore';
 import { analyzeImage, cacheKey, refreshText, type SpecCache } from '../../server/analyze';
-import { addWin, garageLimit, makeRobot, MIN_WIN_GAP, readRobotInput, readWinInput } from '../../server/garage';
+import { garageLimit, makeRobot, MIN_WIN_GAP, readRobotInput, readWinInput } from '../../server/garage';
+import { addWin } from '../../src/game/level';
 import { toRival } from '../../server/rival';
 import { needsTextFix, specHardKanji, withFixedText } from '../../src/game/kanji';
-import { sanitizeSpec } from '../../src/game/spec';
-import { afterWin, canWin, readStory } from '../../src/game/story';
+import { isHash, sanitizeSpec } from '../../src/game/spec';
+import { afterWin, canWin, readStory } from '../../src/game/progress';
 import type { Character, CharacterSpec } from '../../src/game/types';
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
@@ -156,6 +157,15 @@ export const api = onRequest(
     }
     const family = isFamily(user.email);
     const limit = garageLimit(family);
+    // 届いた中身（JSON）は、ここで一度だけ読む。うまくいかなかったときの答え方も、一つにまとめる
+    let body: any;
+    try {
+      body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) ?? {};
+    } catch {
+      res.status(400).json({ error: 'bad json' });
+      return;
+    }
+    const fail = (e: unknown) => res.status(500).json({ error: String((e as Error)?.message ?? e).slice(0, 200) });
 
     // ── その人のガレージに何体まで入るか（画面の「◯ / ◯体」と、いっぱいかどうかのため） ──
     if (isGarage) {
@@ -181,7 +191,7 @@ export const api = onRequest(
         }
         res.json({ robot: null });
       } catch (e) {
-        res.status(500).json({ error: String((e as Error).message).slice(0, 200) });
+        fail(e);
       }
       return;
     }
@@ -191,7 +201,6 @@ export const api = onRequest(
     // ストーリーの進み具合（users/{uid} の story）も、ここで進める。開いていない章・とばした敵の勝ちは数えない
     if (isWin) {
       try {
-        const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
         const inp = readWinInput(body);
         if (!inp) {
           res.status(400).json({ error: 'bad win' });
@@ -208,7 +217,7 @@ export const api = onRequest(
           const story = readStory(me.data()?.story);
           if (now - last < MIN_WIN_GAP || !canWin(story, inp.chapter, inp.slot))
             return { counted: false, exp: robot.exp ?? 0, level: robot.level ?? 1, up: false, story };
-          const w = addWin(robot);
+          const w = addWin(robot.exp);
           const next = afterWin(story, inp.chapter, inp.slot);
           tx.update(ref, { exp: w.exp, level: w.level });
           tx.set(userRef, { lastWinAt: now, lastWin: { chapter: inp.chapter, slot: inp.slot }, story: next }, { merge: true });
@@ -217,7 +226,7 @@ export const api = onRequest(
         if (out === 'missing') res.status(404).json({ error: 'not found' });
         else res.json(out);
       } catch (e) {
-        res.status(500).json({ error: String((e as Error).message).slice(0, 200) });
+        fail(e);
       }
       return;
     }
@@ -226,9 +235,8 @@ export const api = onRequest(
     // 漢字の決まりを入れる前（2026-11-22 の昼）に作ったロボのため。回数の上限には数えない
     if (isFix) {
       try {
-        const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
         const hash = String(body?.hash ?? '');
-        if (!/^[a-f0-9]{64}$/.test(hash)) {
+        if (!isHash(hash)) {
           res.status(400).json({ error: 'bad hash' });
           return;
         }
@@ -240,7 +248,7 @@ export const api = onRequest(
         }
         res.json({ robot: await fixRobot(ref, snap.data() as Character) });
       } catch (e) {
-        res.status(500).json({ error: String((e as Error).message).slice(0, 200) });
+        fail(e);
       }
       return;
     }
@@ -248,7 +256,6 @@ export const api = onRequest(
     // ── ロボをクラウドのガレージに入れる ──
     if (isRobots) {
       try {
-        const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
         const inp = readRobotInput(body);
         if (!inp) {
           res.status(400).json({ error: 'bad robot' });
@@ -269,17 +276,16 @@ export const api = onRequest(
         if (out === 'full') res.status(409).json({ error: 'garage full', limit });
         else res.json({ robot: out });
       } catch (e) {
-        res.status(500).json({ error: String((e as Error).message).slice(0, 200) });
+        fail(e);
       }
       return;
     }
 
     try {
-      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       const image = String(body?.image ?? '');
       const hash = String(body?.hash ?? '');
       // 取っておいたものがあれば、回数に数えずに返す
-      const hit = /^[a-f0-9]{64}$/.test(hash) ? await cache.get(cacheKey(hash)).catch(() => null) : null;
+      const hit = isHash(hash) ? await cache.get(cacheKey(hash)).catch(() => null) : null;
       // ガレージがいっぱいなら、AI に読ませる前に止める（作っても入れられないため）
       if (!hit && (await garageCount(user.uid, limit)) >= limit) {
         res.status(409).json({ error: 'garage full', limit });
@@ -299,7 +305,7 @@ export const api = onRequest(
       console.log(`[analyze] ${result.spec.motif} → ${result.spec.name}（${result.model}）`);
       res.json(result);
     } catch (e) {
-      res.status(500).json({ error: String((e as Error).message).slice(0, 200) });
+      fail(e);
     }
   },
 );

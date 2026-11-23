@@ -6,14 +6,13 @@
 
 import { buildCharacter } from '../src/game/stats';
 import { localSpec } from '../src/game/fallback';
-import { sanitizeSpec } from '../src/game/spec';
+import { isHash, sanitizeSpec } from '../src/game/spec';
 import type { Character, CharacterSpec } from '../src/game/types';
-import { EXP_PER_WIN, growthOf, MAX_EXP } from '../src/game/level';
+import { BOSS_SLOT, MAX_CHAPTER } from '../src/game/progress';
 
 export const GARAGE_LIMIT = 30;
 export const FAMILY_GARAGE_LIMIT = 100; // 家族（ALLOWED_EMAILS）は100体まで（2026-11-23 から）
 export const garageLimit = (family: boolean) => (family ? FAMILY_GARAGE_LIMIT : GARAGE_LIMIT);
-const HASH = /^[a-f0-9]{64}$/;
 const THUMB = /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/;
 const THUMB_MAX = 120_000; // 縮小画像（160ピクセル）はふつう 10KB ほど
 const OLDEST = Date.UTC(2026, 0, 1);
@@ -30,7 +29,7 @@ export interface RobotInput {
 export function readRobotInput(body: any): RobotInput | null {
   const b = body ?? {};
   const hash = String(b.hash ?? '');
-  if (!HASH.test(hash)) return null;
+  if (!isHash(hash)) return null;
   const thumb = typeof b.thumb === 'string' && b.thumb.length <= THUMB_MAX && THUMB.test(b.thumb) ? b.thumb : undefined;
   const source = b.source === 'local' ? 'local' : 'ai';
   const at = Number(b.createdAt);
@@ -76,15 +75,8 @@ export function readWinInput(body: any): WinInput | null {
   const hash = String(b.hash ?? '');
   const chapter = Number(b.chapter);
   const slot = Number(b.slot);
-  if (!HASH.test(hash)) return null;
-  if (!Number.isInteger(chapter) || chapter < 1 || chapter > 99) return null;
-  if (!Number.isInteger(slot) || slot < 0 || slot > 4) return null;
+  if (!isHash(hash)) return null;
+  if (!Number.isInteger(chapter) || chapter < 1 || chapter > MAX_CHAPTER) return null;
+  if (!Number.isInteger(slot) || slot < 0 || slot > BOSS_SLOT) return null;
   return { hash, chapter, slot };
-}
-
-/** 1勝ぶんの経験値を足した、新しい経験値とレベル */
-export function addWin(robot: Pick<Character, 'exp'>) {
-  const before = growthOf(robot.exp);
-  const after = growthOf(Math.min(MAX_EXP, before.exp + EXP_PER_WIN));
-  return { exp: after.exp, level: after.level, before: before.level, up: after.level > before.level };
 }

@@ -2,7 +2,7 @@
 // 持ち主の決めたこと：ログインした人みんなのロボから選ぶ・持ち主の名前は出さない・自分のロボは出さない。
 // 送るのは、ロボの姿と強さを作るのに要るものだけ。写真（thumb）と、写真に写っていたもの（motif）は送らない。
 
-import { lookSeed, sanitizeSpec } from '../src/game/spec';
+import { isHash, lookSeed, sanitizeSpec } from '../src/game/spec';
 import { specHardKanji } from '../src/game/kanji';
 import type { CharacterSpec } from '../src/game/types';
 
@@ -17,9 +17,10 @@ export interface RivalPayload {
 /** ガレージのロボを、敵として送る形にする。小学校で習わない漢字が残っているロボは出さない（null） */
 export function toRival(robot: { seed?: unknown; spec?: unknown }): RivalPayload | null {
   const seed = String(robot.seed ?? '');
-  if (!/^[a-f0-9]{64}$/.test(seed)) return null;
+  if (!isHash(seed)) return null;
   const spec = sanitizeSpec(robot.spec);
   if (specHardKanji(spec).length) return null;
-  // motif を消す前に、見た目の種を決めておく（持ち主の画面と同じ体つきにするため）
-  return { seed, spec: { ...spec, motif: RIVAL_MOTIF, look: lookSeed(spec) } };
+  // motif を消す前に、見た目の種を決めておく（持ち主の画面と同じ体つきにするため）。
+  // 特別な写真のしるし（bonus）は送らない（どんな写真が特別かを、ほかの人に推し量られないように）
+  return { seed, spec: { ...spec, motif: RIVAL_MOTIF, look: lookSeed(spec), bonus: 0 } };
 }

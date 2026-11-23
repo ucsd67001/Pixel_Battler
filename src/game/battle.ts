@@ -2,8 +2,8 @@
 // 一つの行動ごとに ActionResult を返し、演出はそれを見て動く。
 
 import type { Character } from './types';
-import { elementMultiplier, SKILL_TABLE, ULT_POWER, ULT_TABLE } from './data';
-import { fightMult } from './level';
+import { elementMultiplier, ULT_POWER, ULT_TABLE } from './data';
+import { fightMult, spFor } from './level';
 
 const BONUS_SKILL = 1.1;
 
@@ -135,7 +135,7 @@ export function startTurn(st: BattleState): PreTurn {
   me.guarding = false;
   if (me.cooldown > 0) me.cooldown--;
   // SP のたまる量も、レベルの倍率で大きくする（スキルに使う SP も同じ割合で大きいので、使える回数は Lv1 と同じ）
-  me.sp = Math.min(me.c.stats.sp, me.sp + Math.round((me.c.spec.trait === 'focus' ? 20 : 10) * fightMult(me.c)));
+  me.sp = Math.min(me.c.stats.sp, me.sp + spFor(me.c, me.c.spec.trait === 'focus' ? 20 : 10));
   let regen = 0;
   if (me.c.spec.trait === 'regen' && me.hp > 0 && me.hp < me.c.stats.hp) {
     regen = Math.min(me.c.stats.hp - me.hp, Math.round(me.c.stats.hp * 0.018));
@@ -241,7 +241,7 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
     case 'guard':
       res.name = 'ガード＆リペア';
       A.guarding = true;
-      A.sp = Math.min(A.c.stats.sp, A.sp + Math.round(15 * fightMult(A.c)));
+      A.sp = Math.min(A.c.stats.sp, A.sp + spFor(A.c, 15));
       addGauge(A, 10);
       // 守りながら、体勢を立て直して回復する。続けてガードしたときは回復しない（ガードだけをくり返して、終わらなくならないように）
       if (!A.lastGuard) heal(A.c.stats.hp * GUARD_HEAL);
@@ -253,7 +253,7 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
       A.cooldown = sk.cooldown;
       switch (sk.kind) {
         case 'strike':
-          hit(2.0);
+          hit(1.9);
           break;
         case 'barrage':
           for (let i = 0; i < 3; i++) hit(0.65, { share: 1 / 3 });
@@ -263,16 +263,20 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
           if (h) heal(h.amount * 0.5);
           break;
         }
-        case 'breaker':
-          hit(1.5, { ignoreGuard: true });
-          addBuff(D, { stat: 'def', mult: 0.7, turns: 3, fresh: false, label: 'ぼうぎょダウン' });
-          res.buffs.push({ target: d, label: 'ぼうぎょダウン', good: false });
+        case 'breaker': {
+          // 見切りでかわされたら、弱める効果も入らない
+          const h = hit(1.5, { ignoreGuard: true });
+          if (h && !h.miss) {
+            addBuff(D, { stat: 'def', mult: 0.7, turns: 3, fresh: false, label: 'ぼうぎょダウン' });
+            res.buffs.push({ target: d, label: 'ぼうぎょダウン', good: false });
+          }
           break;
+        }
         case 'heal':
-          heal(A.c.stats.hp * 0.27);
+          heal(A.c.stats.hp * 0.31);
           break;
         case 'powerup':
-          addBuff(A, { stat: 'atk', mult: 1.6, turns: 3, fresh: true, label: 'こうげきアップ' });
+          addBuff(A, { stat: 'atk', mult: 1.7, turns: 3, fresh: true, label: 'こうげきアップ' });
           addGauge(A, 25);
           res.buffs.push({ target: a, label: 'こうげきアップ', good: true });
           break;
@@ -282,11 +286,14 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
           heal(A.c.stats.hp * 0.17);
           addGauge(A, 15);
           break;
-        case 'hex':
-          hit(0.9);
-          addBuff(D, { stat: 'atk', mult: 0.7, turns: 3, fresh: false, label: 'こうげきダウン' });
-          res.buffs.push({ target: d, label: 'こうげきダウン', good: false });
+        case 'hex': {
+          const h = hit(0.9);
+          if (h && !h.miss) {
+            addBuff(D, { stat: 'atk', mult: 0.7, turns: 3, fresh: false, label: 'こうげきダウン' });
+            res.buffs.push({ target: d, label: 'こうげきダウン', good: false });
+          }
           break;
+        }
         case 'counter':
           A.counter = true;
           res.buffs.push({ target: a, label: 'カウンターの構え', good: true });
@@ -308,6 +315,7 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
   if (D.counter && res.hits.length > 0 && D.hp > 0) {
     D.counter = false;
     res.counterHit = dealDamage(st, d, 1.7, rng, { ignoreGuard: true, isCounter: true });
+    D.firstUsed = true; // 先手の 1.5倍は、カウンターで使っても1回きり
   }
   if (res.hits.length > 0) A.firstUsed = true;
   A.lastGuard = type === 'guard';
@@ -322,8 +330,4 @@ export function act(st: BattleState, type: ActionType, rng: Rng): ActionResult {
     st.winner = d;
   }
   return res;
-}
-
-export function skillIsDamaging(c: Character) {
-  return SKILL_TABLE[c.skill.kind].damaging;
 }

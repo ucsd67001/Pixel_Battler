@@ -1,20 +1,18 @@
-// ストーリー（2026-11-23。docs/STORY.md の段階4）。画面とサーバーの両方が使う、純粋な決まり。
+// ストーリー（2026-11-23。docs/STORY.md の段階4）。章の中身（敵・ボスの一言）と、章の敵のレベル。
 //   ・99章。各章に5体の敵（1〜4体目が手下、5体目がボス）。5連戦で、HP は毎回まんたんから
 //   ・負けたら、負けた敵からやり直し（勝った分は残る）。ボスに勝つと章クリアで、次の章が開く
 //   ・クリアした章は、何度でもやり直せる（レベル上げのため）
-//   ・章N の敵は Lv N。1〜4体目は、たまに「だれかのロボ」と入れかわる（その章のレベルで）
+//   ・章N の敵は Lv 3N−2（1・4・7…）。手下4体のうち2体は、章とちがう属性（minions.ts）
+//   ・だれかのロボの乱入は、ストーリーには無い（2026-11-23、持ち主が決めた。コンピュータと対戦だけ）
 //   ・いま中身があるのは最初の9章。10章から先は、持ち主が別に考えて作る
 
-import type { Character } from './types';
+import type { Character, Element } from './types';
 import { CPU_CHARACTERS } from './cpu';
 import { MINIONS } from './minions';
+import { BOSS_SLOT, CHAPTER_SIZE, STORY_CHAPTERS } from './progress';
 
-export const MAX_CHAPTER = 99;
-/** 1章の敵の数（5体目がボス） */
-export const CHAPTER_SIZE = 5;
-export const BOSS_SLOT = CHAPTER_SIZE - 1;
-/** 1〜4体目が、だれかのロボと入れかわる割合 */
-export const STORY_RIVAL_RATE = 0.2;
+// 進み具合の決まりは progress.ts（サーバーも使うので、敵の中身と分けてある）。画面からは、ここからも読めるようにする
+export * from './progress';
 
 export interface Chapter {
   no: number; // 1 から
@@ -44,6 +42,7 @@ export const CHAPTERS: Chapter[] = META.map((m, i) => ({
   boss: CPU_CHARACTERS[i],
   minions: MINIONS[i],
 }));
+if (CHAPTERS.length !== STORY_CHAPTERS) throw new Error('STORY_CHAPTERS（progress.ts）と章の数が合いません');
 
 export const chapterOf = (no: number): Chapter | undefined => CHAPTERS[no - 1];
 
@@ -54,40 +53,19 @@ export function enemyAt(no: number, slot: number): Character | undefined {
   return slot === BOSS_SLOT ? ch.boss : ch.minions[slot];
 }
 
-/** 章の敵のレベル */
-export const chapterLevel = (no: number) => no;
+/**
+ * 章の敵のレベル：1・4・7…（3N−2。2026-11-23、持ち主が決めた）。
+ * 1章は5勝で Lv6 になるので、章N＝Lv N だと3章から先がほとんど負けなかった。
+ * 3N−2 なら、1体のロボで続けて進むと7〜8章で敵と同じくらいのレベルになり、その先はレベル上げが要る
+ */
+export const chapterLevel = (no: number) => 3 * no - 2;
 
-// ── 進み具合（ログインしているときは Firestore の users/{uid} の story。書くのはサーバーだけ） ──
-export interface StoryProgress {
-  cleared: number; // クリアした章のいちばん大きい番号（0＝まだ）
-  run: { chapter: number; next: number } | null; // いま進めている章と、次に戦う敵（0〜4）
-}
-
-export const EMPTY_STORY: StoryProgress = { cleared: 0, run: null };
-
-/** サーバー・保存場所から読んだものを、正しい形にする */
-export function readStory(raw: any): StoryProgress {
-  const cleared = Math.min(MAX_CHAPTER, Math.max(0, Math.floor(Number(raw?.cleared) || 0)));
-  const c = Math.floor(Number(raw?.run?.chapter));
-  const n = Math.floor(Number(raw?.run?.next));
-  const run = c >= 1 && c <= MAX_CHAPTER && n >= 1 && n <= BOSS_SLOT ? { chapter: c, next: n } : null;
-  return { cleared, run };
-}
-
-/** その章が開いているか（クリアした章と、その次の章） */
-export const isOpen = (p: StoryProgress, no: number) => no >= 1 && no <= Math.min(MAX_CHAPTER, p.cleared + 1) && !!chapterOf(no);
-
-/** その章で、次に戦う敵（0〜4） */
-export const nextSlot = (p: StoryProgress, no: number) => (p.run?.chapter === no ? p.run.next : 0);
-
-/** その勝ちを数えてよいか：開いている章で、1体目か、続きの敵 */
-export function canWin(p: StoryProgress, no: number, slot: number): boolean {
-  if (!isOpen(p, no) || slot < 0 || slot > BOSS_SLOT) return false;
-  return slot === 0 || nextSlot(p, no) === slot;
-}
-
-/** 勝ったあとの進み具合 */
-export function afterWin(p: StoryProgress, no: number, slot: number): StoryProgress {
-  if (slot >= BOSS_SLOT) return { cleared: Math.max(p.cleared, no), run: null };
-  return { cleared: p.cleared, run: { chapter: no, next: slot + 1 } };
+/** その章の敵の属性（出てくる順に、重ならないように） */
+export function chapterElements(no: number): Element[] {
+  const out: Element[] = [];
+  for (let slot = 0; slot < CHAPTER_SIZE; slot++) {
+    const e = enemyAt(no, slot)?.spec.element;
+    if (e && !out.includes(e)) out.push(e);
+  }
+  return out;
 }

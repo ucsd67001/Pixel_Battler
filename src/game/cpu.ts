@@ -1,7 +1,7 @@
 // コンピュータの敵（九体）と、その考え方
 
 import type { Character, CharacterSpec } from './types';
-import { SKILL_TABLE } from './data';
+import { SKILL_TABLE, skillOf } from './data';
 import { type ActionType, type BattleState, type Rng, type Side, canUse, foe, MAX_GAUGE } from './battle';
 
 // 敵は九体（2026-11-23 に三体から九体に）。バトルのたびに、ランダムで一体が出てくる（同じ敵は続けて出ない）。
@@ -17,13 +17,7 @@ function cpu(id: string, spec: CharacterSpec, stats: Character['stats']): Charac
     spec,
     stats,
     rank: 'A',
-    skill: {
-      kind: spec.skill.kind,
-      name: spec.skill.name,
-      description: spec.skill.description,
-      spCost: SKILL_TABLE[spec.skill.kind].spCost,
-      cooldown: SKILL_TABLE[spec.skill.kind].cooldown,
-    },
+    skill: skillOf(spec.skill),
     createdAt: 0,
     source: 'cpu',
   };
@@ -76,7 +70,7 @@ const BURNHOUND = cpu(
     },
     trait: 'first',
   },
-  { hp: 1850, sp: 100, atk: 268, def: 170 },
+  { hp: 1910, sp: 100, atk: 268, def: 170 },
 );
 
 // ⑨ 月の章：空中型・光・ビーム（回復しながら、遠くから打つ）
@@ -101,7 +95,7 @@ const LUMINAS = cpu(
     },
     trait: 'focus',
   },
-  { hp: 1980, sp: 150, atk: 238, def: 200 },
+  { hp: 2050, sp: 150, atk: 238, def: 200 },
 );
 
 // ② 水の章：人型・水・スラッシュ（受けて返す、会心の一げき）。もとはフロスティア
@@ -176,7 +170,7 @@ const TIDALON = cpu(
     },
     trait: 'regen',
   },
-  { hp: 2040, sp: 110, atk: 207, def: 222 },
+  { hp: 1980, sp: 110, atk: 207, def: 222 },
 );
 
 // ④ 風の章：けもの型・風・スラッシュ（相手を弱らせて、守りをつらぬく）。もとはホーンビート
@@ -201,7 +195,7 @@ const GALEBEAT = cpu(
     },
     trait: 'pierce',
   },
-  { hp: 1900, sp: 105, atk: 280, def: 185 },
+  { hp: 1970, sp: 105, atk: 280, def: 185 },
 );
 
 // ⑥ 夜の章：空中型・夜・ビーム（回復しながら、ねばり強く戦う）。もとはパンプキッド
@@ -226,7 +220,7 @@ const JACKLAMP = cpu(
     },
     trait: 'fighter',
   },
-  { hp: 2100, sp: 130, atk: 234, def: 205 },
+  { hp: 2020, sp: 130, atk: 234, def: 205 },
 );
 
 // ⑤ 光の章：空中型・光・ラッシュ（先に動いて、大きな一発）。もとはハナビート
@@ -251,7 +245,7 @@ const PIKARION = cpu(
     },
     trait: 'first',
   },
-  { hp: 1900, sp: 115, atk: 258, def: 175 },
+  { hp: 2000, sp: 115, atk: 258, def: 175 },
 );
 
 // 章の順：地・水・火・風・光・夜・森・海・月

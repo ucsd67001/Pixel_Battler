@@ -2,7 +2,7 @@
 // AIには傾向（1〜5）だけを選ばせ、数字はここで決める＝強さの釣り合いを保つため。
 
 import type { Bias, Character, CharacterSpec, Rank, Stats } from './types';
-import { SKILL_TABLE } from './data';
+import { skillOf } from './data';
 import { rngFrom } from './random';
 
 export const STAT_RANGE = {
@@ -51,20 +51,13 @@ export function buildCharacter(
   thumb?: string,
 ): Character {
   const { stats, rank } = computeStats(spec, seed);
-  const t = SKILL_TABLE[spec.skill.kind];
   return {
     id: `${seed.slice(0, 12)}-${Date.now().toString(36)}`,
     seed,
     spec,
     stats,
     rank,
-    skill: {
-      kind: spec.skill.kind,
-      name: spec.skill.name,
-      description: spec.skill.description,
-      spCost: t.spCost,
-      cooldown: t.cooldown,
-    },
+    skill: skillOf(spec.skill),
     createdAt: Date.now(),
     thumb,
     source,

@@ -4,17 +4,29 @@
 //   StoryBattle … 5連戦の1戦。勝ったロボに経験値が入り、次の敵へ進む
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import type { Character } from '../game/types';
+import type { Character, Element } from '../game/types';
 import { useGarage, useStory, type WinResult } from '../game/garage';
 import {
-  BOSS_SLOT, CHAPTER_SIZE, CHAPTERS, chapterLevel, chapterOf, enemyAt, isOpen, MAX_CHAPTER, nextSlot,
-  STORY_RIVAL_RATE, type StoryProgress,
+  BOSS_SLOT, CHAPTER_SIZE, CHAPTERS, chapterElements, chapterLevel, chapterOf, enemyAt, isOpen, nextSlot,
+  type StoryProgress,
 } from '../game/story';
 import { atLevel, EXP_PER_WIN, levelOf } from '../game/level';
-import { ELEMENT_INFO } from '../game/data';
-import { prefetchRival, takeRival } from '../game/rival';
+import { ELEMENT_INFO, strongAgainst } from '../game/data';
 import { Showcase } from './StageView';
 import { Battle } from './Battle';
+
+/** 属性の小さな札（色つき） */
+function ElementChips({ list }: { list: Element[] }) {
+  return (
+    <>
+      {list.map((e) => (
+        <span key={e} className="chip el" style={{ '--el': ELEMENT_INFO[e].color } as CSSProperties}>
+          {ELEMENT_INFO[e].label}
+        </span>
+      ))}
+    </>
+  );
+}
 
 function chapterState(p: StoryProgress, no: number) {
   if (!isOpen(p, no)) return { label: 'まだ', cls: 'locked' };
@@ -36,7 +48,7 @@ export function StoryMap({ onChapter, onBack }: { onChapter: (no: number) => voi
           ◀ タイトル
         </button>
         <span className="bar-title">STORY</span>
-        <span className="bar-right">{story ? `${story.cleared} / ${MAX_CHAPTER}章 クリア` : ''}</span>
+        <span className="bar-right">{story ? `${story.cleared}章 クリア` : ''}</span>
       </header>
       {!story ? (
         <div className="empty">読みこんでいます…</div>
@@ -54,9 +66,7 @@ export function StoryMap({ onChapter, onBack }: { onChapter: (no: number) => voi
               >
                 <span className="chapter-no">{ch.no}章</span>
                 <span className="chapter-name">
-                  <b>
-                    {ch.theme}：{ch.title}
-                  </b>
+                  <b>{ch.title}</b>
                   <small>{s.cls === 'locked' ? '？？？' : `ボス ${ch.boss.spec.name} ・ 敵は Lv${chapterLevel(ch.no)}`}</small>
                 </span>
                 <span className="chapter-state">{s.cls === 'locked' ? '🔒' : s.label}</span>
@@ -87,6 +97,8 @@ export function ChapterView({
   const shown = view ?? next;
   const enemy = enemyAt(no, shown);
   if (!ch) return null;
+  // 光と夜は、おたがいに大ダメージ（「有利」ではない）
+  const bossMutual = strongAgainst(ch.boss.spec.element).every((e) => strongAgainst(e).includes(ch.boss.spec.element));
   return (
     <div className="screen story-screen">
       {enemy && <Showcase spec={enemy.spec} className="stage stage-bg" />}
@@ -95,11 +107,17 @@ export function ChapterView({
           ◀ 章の一覧
         </button>
         <span className="bar-title">
-          {no}章 {ch.theme}：{ch.title}
+          {no}章 {ch.title}
         </span>
         <span className="bar-right">敵は Lv{chapterLevel(no)}</span>
       </header>
       <div className="chapter-view">
+        <div className="chapter-hint">
+          <span>この章の敵</span>
+          <ElementChips list={chapterElements(no)} />
+          <span>{bossMutual ? 'ボスとおたがいに大ダメージ' : 'ボスに有利'}</span>
+          <ElementChips list={strongAgainst(ch.boss.spec.element)} />
+        </div>
         <div className="slot-list">
           {[0, 1, 2, 3, 4].map((slot) => {
             const e = enemyAt(no, slot)!;
@@ -134,7 +152,7 @@ export function ChapterView({
             </button>
           )}
           <div className="garage-note">
-            5体と続けて戦います。HP は毎回まんたんから。負けても、勝った分は残ります。ロボは1体ごとに えらべます。
+            5体と続けて戦います。HP は毎回まんたんから。負けても、勝った分は残ります。ロボは1体ごとに 選べます。
           </div>
         </div>
       </div>
@@ -156,7 +174,7 @@ export function StoryBattle({
   slot: number;
   seed: string; // 戦うロボ（ガレージの写真の印）
   onNext: (slot: number, seed: string) => void; // 同じロボで、次の敵（または同じ敵にもう一度）
-  onPick: (slot: number) => void; // ロボをえらび直して、その敵と戦う
+  onPick: (slot: number) => void; // ロボを選び直して、その敵と戦う
   onChapter: (no: number) => void;
   onMap: () => void;
 }) {
@@ -166,24 +184,13 @@ export function StoryBattle({
   const [fight, setFight] = useState<{ player: Character; enemy: Character; intro?: string } | null>(null);
   useEffect(() => {
     if (fight || !base) return;
-    const lv = chapterLevel(no);
-    let enemy: Character = atLevel(enemyAt(no, slot)!, lv);
-    let intro: string | undefined;
-    // 1〜4体目は、たまに、だれかのロボが入れかわる（その章のレベルで。持ち主が育てたレベルは使わない）
-    const rival = slot < BOSS_SLOT && Math.random() < STORY_RIVAL_RATE ? takeRival() : null;
-    if (rival) {
-      enemy = atLevel(rival, lv);
-      intro = `だれかのロボ「${rival.spec.name}」が わりこんできた！`;
-    } else if (slot === BOSS_SLOT) {
-      intro = `${enemy.spec.name}「${chapterOf(no)!.line}」`;
-    }
+    const enemy = atLevel(enemyAt(no, slot)!, chapterLevel(no));
+    const intro = slot === BOSS_SLOT ? `${enemy.spec.name}「${chapterOf(no)!.line}」` : undefined;
     setFight({ player: atLevel(base, levelOf(base)), enemy, intro });
   }, [base, fight, no, slot]);
-  useEffect(() => {
-    void prefetchRival();
-  }, []);
 
-  if (!garage.ready) return <div className="screen"><div className="empty">読みこんでいます…</div></div>;
+  // ガレージを読み終えるまでと、戦う姿を決めるまでは「読みこんでいます」（「見つかりません」が一瞬出ないように）
+  if (!garage.ready || (base && !fight)) return <div className="screen"><div className="empty">読みこんでいます…</div></div>;
   if (!base || !fight)
     return (
       <div className="screen">

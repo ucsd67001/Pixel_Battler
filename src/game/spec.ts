@@ -62,6 +62,9 @@ function lv(v: unknown): number {
 }
 
 // 受け取った設計図を、決まった形・長さ・選択肢にそろえる
+/** 写真の印（SHA-256 の16進64けた）の形か */
+export const isHash = (s: unknown): s is string => typeof s === 'string' && /^[a-f0-9]{64}$/.test(s);
+
 export function sanitizeSpec(raw: any): CharacterSpec {
   const r = raw ?? {};
   const element: Element = pick(r.element, ELEMENTS, 'light');

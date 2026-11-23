@@ -1,15 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { isMuted, setMuted, sfx, unlockAudio } from './lib/sfx';
 import type { Character } from './game/types';
 import { Title } from './ui/Title';
 import { Create } from './ui/Create';
 import { Hangar } from './ui/Hangar';
+import { prefetchRival } from './game/rival';
 import { Battle } from './ui/Battle';
 import { Room } from './ui/Room';
-import { Showroom } from './ui/Showroom';
 import { ChapterView, StoryBattle, StoryMap } from './ui/Story';
-import { chapterLevel, chapterOf } from './game/story';
+import { BOSS_SLOT, chapterLevel, enemyAt } from './game/story';
+import { advantageText, ELEMENT_INFO } from './game/data';
 import type { NetBattle, RoomSession } from './net/room';
+
+// ロボの見本の画面は開発中だけ。本番のファイルには入れない
+const Showroom = lazy(() => import('./ui/Showroom').then((m) => ({ default: m.Showroom })));
 
 type Screen =
   | { name: 'title' }
@@ -77,7 +81,12 @@ export function App() {
   );
 
   function renderScreen() {
-  if (import.meta.env.DEV && location.search.includes('showroom')) return <Showroom />;
+  if (import.meta.env.DEV && location.search.includes('showroom'))
+    return (
+      <Suspense fallback={null}>
+        <Showroom />
+      </Suspense>
+    );
 
   switch (screen.name) {
     case 'title':
@@ -85,7 +94,10 @@ export function App() {
         <Title
           onCreate={() => setScreen({ name: 'create' })}
           onHangar={() => setScreen({ name: 'hangar' })}
-          onPick={() => setScreen({ name: 'pick' })}
+          onPick={() => {
+            void prefetchRival(); // あいてになる、ほかの人のロボを先にもらっておく（コンピュータと対戦だけ）
+            setScreen({ name: 'pick' });
+          }}
           onRoom={() => setScreen({ name: 'room' })}
           onStory={() => setScreen({ name: 'story' })}
         />
@@ -119,11 +131,17 @@ export function App() {
       );
     case 'storypick': {
       const { no, slot } = screen;
+      const enemy = enemyAt(no, slot);
+      const el = enemy?.spec.element;
       return (
         <Hangar
           pick
-          barTitle={`${no}章 ・ ${slot === 4 ? 'BOSS' : `${slot + 1}体目`}`}
-          note={`${chapterOf(no)?.theme ?? ''}の章の敵は Lv${chapterLevel(no)}。戦うロボを えらんでください。ロボは、自分のレベルの強さで戦います。`}
+          barTitle={`${no}章 ・ ${slot === BOSS_SLOT ? 'BOSS' : `${slot + 1}体目`}`}
+          note={
+            `相手は「${enemy?.spec.name ?? ''}」（${el ? ELEMENT_INFO[el].label : ''}・Lv${chapterLevel(no)}）。` +
+            (el ? advantageText(el) : '') +
+            'ロボは、自分のレベルの強さで戦います。'
+          }
           backLabel="◀ 章の画面"
           onBack={() => setScreen({ name: 'chapter', no })}
           onFight={(c) => setScreen({ name: 'storybattle', no, slot, seed: c.seed, key: Date.now() })}
