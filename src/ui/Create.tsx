@@ -295,7 +295,7 @@ export function Create({
         </header>
         <div className="split">
           <div className="split-stage">
-            <ItemShowcase item={item} photo={preview} />
+            <ItemShowcase item={item} reveal />
           </div>
           <div className="split-info">
             {note && <div className="note">{note}</div>}

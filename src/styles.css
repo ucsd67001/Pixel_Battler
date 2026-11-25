@@ -335,51 +335,53 @@ button {
   box-shadow: inset 0 0 18px rgba(62, 240, 255, 0.25);
 }
 
-/* できたアイテムを大きく見せる（3D は段階4） */
+/* できたアイテムを大きく見せる（試着ロボに持たせた 3D。2026-11-26） */
 .item-stage {
   position: absolute;
   inset: 0;
+  background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--ic) 18%, transparent), transparent 60%);
+}
+.item-stage .stage {
+  position: absolute;
+  inset: 0;
+}
+.item-forms {
+  position: absolute;
+  top: 12px;
+  left: 12px;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 22px;
-  background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--ic) 22%, transparent), transparent 60%);
+  gap: 4px;
 }
-.item-orb {
-  width: min(52vmin, 300px);
-  aspect-ratio: 1;
-  padding: 10px;
-  border-radius: 50%;
-  background: conic-gradient(from 30deg, var(--ia), var(--ib), var(--ic), var(--ia));
-  box-shadow: 0 0 40px color-mix(in srgb, var(--ic) 60%, transparent);
-  animation: item-spin 9s linear infinite;
+.item-form-btn {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  background: rgba(10, 16, 32, 0.75);
+  border: 1px solid var(--panel-line);
+  cursor: pointer;
 }
-.item-orb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 50%;
-  border: 3px solid rgba(5, 8, 18, 0.85);
-  animation: item-spin 9s linear infinite reverse;
+.item-form-btn.on {
+  color: #fff;
+  border-color: var(--cyan);
 }
-@keyframes item-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
+/* 種類の名前は右上に小さく（ロボの体に重ならないように） */
 .item-kind {
+  position: absolute;
+  top: 10px;
+  right: 14px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
+  pointer-events: none;
   text-shadow: 0 0 14px color-mix(in srgb, var(--ic) 80%, transparent);
 }
 .item-kind b {
-  font-size: 34px;
-  letter-spacing: 0.3em;
+  font-size: 20px;
+  letter-spacing: 0.2em;
 }
 .item-kind span {
-  font-size: 15px;
+  font-size: 13px;
   color: #b9cbea;
 }
 /* ロボに持たせているアイテム（ガレージ。2026-11-26） */
@@ -477,16 +479,9 @@ button {
 }
 
 /* アイテムの置き場（2026-11-25） */
-.items-screen .item-stage {
-  padding-bottom: 112px; /* 下の一覧（roster。しぼりこみの3つのボタンの高さ）と重ならないように */
-  gap: 12px;
-}
 @media (max-width: 820px) {
-  .items-screen .item-orb {
-    width: min(24vh, 52vmin);
-  }
-  .items-screen .item-kind b {
-    font-size: 26px;
+  .item-kind b {
+    font-size: 16px;
   }
 }
 .item-filter {
@@ -536,12 +531,6 @@ button {
 }
 .menu-pair .btn {
   flex: 1;
-}
-@media (prefers-reduced-motion: reduce) {
-  .item-orb,
-  .item-orb img {
-    animation: none;
-  }
 }
 
 /* ── スキャン ── */
