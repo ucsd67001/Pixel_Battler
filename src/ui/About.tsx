@@ -29,7 +29,7 @@ function cycle(start: Element): Element[] {
 
 function Section({ title, en, children }: { title: string; en: string; children: ReactNode }) {
   return (
-    <section className="about-sec">
+    <section className="page-sec">
       <h2>
         <small>{en}</small>
         {title}
@@ -58,7 +58,7 @@ export function About({ onBack }: { onBack: () => void }) {
     { name: '必殺技', body: `${GLOSSARY.ult.body}${GLOSSARY.gauge.body}` },
   ];
   return (
-    <div className="screen story-screen about-screen">
+    <div className="screen story-screen page-screen">
       <Showcase spec={CPU_CHARACTER.spec} className="stage stage-bg" />
       <header className="bar">
         <button className="btn ghost small" onClick={onBack}>
@@ -66,7 +66,7 @@ export function About({ onBack }: { onBack: () => void }) {
         </button>
         <span className="bar-title">ABOUT</span>
       </header>
-      <div className="about">
+      <div className="page">
         <div className="about-hero">
           <h1>ピクセル・バトラーって？</h1>
           <p>
@@ -91,7 +91,7 @@ export function About({ onBack }: { onBack: () => void }) {
               <span>できたロボはガレージに入る。すぐにバトルへ！</span>
             </li>
           </ol>
-          <p className="about-note">
+          <p className="page-note">
             強さ（HP やこうげきなどの数字と、ランク S・A・B・C）は、写真で決まります。同じ写真からは、いつも同じ強さのロボが生まれます。ランクが低くても、属性の相性や技の使い方しだいで、強いロボに勝てます。
           </p>
         </Section>
@@ -105,7 +105,7 @@ export function About({ onBack }: { onBack: () => void }) {
               </div>
             ))}
           </div>
-          <p className="about-note">ストーリーは、いま {CHAPTERS.length}章まであります。</p>
+          <p className="page-note">ストーリーは、いま {CHAPTERS.length}章まであります。</p>
         </Section>
 
         <Section title="バトルのきほん" en="BATTLE">
@@ -118,7 +118,7 @@ export function About({ onBack }: { onBack: () => void }) {
               </div>
             ))}
           </div>
-          <p className="about-note">{GLOSSARY.round.body}</p>
+          <p className="page-note">{GLOSSARY.round.body}</p>
         </Section>
 
         <Section title="属性の相性" en="ELEMENTS">
@@ -132,13 +132,13 @@ export function About({ onBack }: { onBack: () => void }) {
             ))}
             <El e={ring[0]} />
           </div>
-          <p className="about-note">矢印の先の属性に強い。水は火を消す。風は火をあおって、かえって大きくしてしまう。風は土や岩をけずる。土は水をせき止めて、すいこむ。</p>
+          <p className="page-note">矢印の先の属性に強い。水は火を消す。風は火をあおって、かえって大きくしてしまう。風は土や岩をけずる。土は水をせき止めて、すいこむ。</p>
           <div className="about-ring">
             <El e="light" />
             <span className="about-arrow">◀▶</span>
             <El e="dark" />
           </div>
-          <p className="about-note">光と夜は、おたがいに強い（どちらも 1.3倍）。</p>
+          <p className="page-note">光と夜は、おたがいに強い（どちらも 1.3倍）。</p>
         </Section>
 
         <Section title="ランクとレベル" en="RANK & LEVEL">

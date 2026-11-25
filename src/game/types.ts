@@ -101,6 +101,8 @@ export interface Character {
   exp?: number;
   expV?: number; // 経験値の表の版（2026-11-25 から 2。無いものは前の表。level.ts の expOf）
   level?: number;
+  // そのロボの戦績（2026-11-25 から数える。src/game/record.ts の BattleRecord の形。書きこむのはサーバーだけ）
+  record?: unknown;
   // ストーリーのバトルで、そのレベルの数字にしてあるロボ（atLevel で付く）。バトルの計算が、SP のたまり方とぼうぎょの効き方を合わせるのに使う
   fightLevel?: number;
 }

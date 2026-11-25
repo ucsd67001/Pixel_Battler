@@ -1828,14 +1828,14 @@ button {
   margin: 0 auto 12px;
 }
 
-/* ── ピクセル・バトラーって？（あそびかたのページ。2026-11-25） ── */
-.about-screen > .about {
+/* ── 読むページ（ピクセル・バトラーって？・マイページ。2026-11-25）の共通の枠：page-screen・page・page-sec・page-note ── */
+.page-screen > .page {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
 }
-.about {
+.page {
   width: min(640px, calc(100% - 32px));
   margin: 0 auto;
   padding: 20px 0 32px;
@@ -1858,7 +1858,7 @@ button {
 .about-hero b {
   color: var(--gold);
 }
-.about-sec {
+.page-sec {
   margin-top: 18px;
   padding: 14px 16px 16px;
   background: var(--panel);
@@ -1866,21 +1866,21 @@ button {
   clip-path: var(--cut);
   backdrop-filter: blur(6px);
 }
-.about-sec h2 {
+.page-sec h2 {
   margin: 0 0 10px;
   font-size: 18px;
 }
-.about-sec h2 small {
+.page-sec h2 small {
   display: block;
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.2em;
   color: var(--cyan);
 }
-.about-sec p {
+.page-sec p {
   margin: 8px 0;
 }
-.about-note {
+.page-note {
   font-size: 13px;
   color: #b9cbea;
 }
@@ -1970,4 +1970,89 @@ button {
   display: flex;
   justify-content: center;
   gap: 8px;
+}
+
+/* ── マイページ（2026-11-25） ── */
+.my-name {
+  text-align: center;
+}
+.my-name b {
+  display: block;
+  font-size: 22px;
+  color: #fff;
+}
+.my-name small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.my-boxes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+.my-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--cyan);
+  background: rgba(255, 255, 255, 0.04);
+}
+.my-box b {
+  color: var(--cyan);
+  font-size: 14px;
+}
+.my-box span {
+  font-size: 13px;
+  color: #cfe3ff;
+}
+.my-big {
+  font-family: var(--mono);
+  font-weight: 900;
+  font-size: 34px;
+  line-height: 1.2;
+  color: #fff;
+}
+.my-big small {
+  margin-left: 4px;
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--muted);
+}
+.my-robots {
+  display: grid;
+  gap: 6px;
+}
+.my-robot {
+  --el: var(--cyan);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--el);
+  background: rgba(255, 255, 255, 0.04);
+}
+.my-robot img,
+.my-robot .noimg {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  object-fit: cover;
+  background: #223;
+}
+.my-robot-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.my-robot-name b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.my-robot-name small {
+  font-size: 12px;
+  color: #b9cbea;
+  line-height: 1.5;
 }

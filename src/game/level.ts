@@ -144,8 +144,8 @@ export function atLevel(c: Character, level: number): Character {
   };
 }
 
-/** バトルの外へ出すとき（ふたりで対戦など）に、レベルの分を外す。数字はガレージのもとのまま */
+/** バトルの外へ出すとき（ふたりで対戦など）に、レベルの分と戦績を外す。数字はガレージのもとのまま */
 export function withoutGrowth(c: Character): Character {
-  const { exp: _exp, expV: _expV, level: _level, fightLevel: _fight, ...rest } = c;
+  const { exp: _exp, expV: _expV, level: _level, fightLevel: _fight, record: _record, ...rest } = c;
   return rest;
 }

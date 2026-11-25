@@ -14,6 +14,8 @@ import { elementTip, GLOSSARY } from '../game/glossary';
 import { playBgm, sfx, stopBgm } from '../lib/sfx';
 import { mulberry32 } from '../game/random';
 import type { NetBattle } from '../net/room';
+import { endRecord, startRecord, type BattleTicket } from '../game/garage';
+import type { RecordMode } from '../game/record';
 
 interface SideHud {
   hp: number;
@@ -136,6 +138,7 @@ export function Battle({
   enemy: fixedEnemy,
   intro,
   resultPanel,
+  record,
 }: {
   player: Character;
   onExit: () => void;
@@ -148,6 +151,8 @@ export function Battle({
   intro?: string;
   /** 決着のあとの欄（ストーリーの「次へ」など）。無ければ、いつもの「もう一度」「もどる」 */
   resultPanel?: (result: 'win' | 'lose' | 'draw') => ReactNode;
+  /** 戦績に数えるとき：コンピュータと対戦（cpu）・ふたりで対戦（room）。ストーリーは /api/robots/win が数えるので付けない */
+  record?: RecordMode;
 }) {
   // コンピュータと対戦の敵は、コンピュータの9体か、ほかの人のロボ（みんなのロボ。動かすのはコンピュータ）
   const [enemy] = useState(() => net?.opponent ?? fixedEnemy ?? pickEnemy());
@@ -188,6 +193,18 @@ export function Battle({
       stopBgm(0.4);
     };
   }, []);
+  // 戦績：始めるときに整理券をもらい、決着がついたら結果を知らせる（とちゅうでぬけたバトルは数えない）。
+  // 開発中は画面の作り直しで二度呼ばれるので、一枚だけにする
+  const ticket = useRef<Promise<BattleTicket | null> | null>(null);
+  useEffect(() => {
+    if (record && !ticket.current) ticket.current = startRecord(record, player, net?.battleId);
+  }, []);
+  useEffect(() => {
+    if (!result || !ticket.current) return;
+    const t = ticket.current;
+    ticket.current = null;
+    void t.then((x) => x && endRecord(x, result));
+  }, [result]);
   // あいてが、バトルをぬけた・部屋からいなくなった
   useEffect(() => {
     if (!net) return;

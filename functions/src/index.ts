@@ -2,7 +2,8 @@
 // ロボをクラウドのガレージに入れる窓口（/api/robots。一人30体まで、家族は100体まで。一覧と消すのは、画面が Firestore を直接使う）、
 // その人のガレージの上限を教える窓口（/api/garage）、ガレージのロボの文を直す窓口（/api/robots/fix。素手で戦う文に・習わない漢字を取りのぞく）、
 // ほかの人のロボを一体、コンピュータの敵として返す窓口（/api/rival）、
-// ストーリーで勝ったロボに経験値を足す窓口（/api/robots/win。2026-11-23 から。レベルと経験値を書くのはサーバーだけ）。
+// ストーリーで勝ったロボに経験値を足す窓口（/api/robots/win。2026-11-23 から。レベルと経験値を書くのはサーバーだけ）、
+// コンピュータと対戦・ふたりで対戦の戦績を数える窓口（/api/battle/start と /api/battle/end。2026-11-25 から。src/game/record.ts）。
 // Hosting の書き換え（firebase.json）で、同じドメインの /api/** がここに来る。
 // 写真から作れるのは、Google でログインした人だれでも（2026-11-22 から。それまでは家族だけ）。
 // 回数の上限：家族（ALLOWED_EMAILS）は一人一日30回、家族以外は一人一日10回、家族以外の全員を合わせて一日200回。
@@ -20,6 +21,7 @@ import { toRival } from '../../server/rival';
 import { needsTextFix, specHardKanji, withFixedText } from '../../src/game/kanji';
 import { isHash, sanitizeSpec } from '../../src/game/spec';
 import { afterWin, canWin, readStory } from '../../src/game/progress';
+import { DAILY_RECORDS, isMode, isResult, jstDay, MIN_BATTLE_MS, TICKET_LIFE_MS } from '../../src/game/record';
 import type { Character, CharacterSpec } from '../../src/game/types';
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
@@ -36,6 +38,10 @@ const db = getFirestore();
 db.settings({ ignoreUndefinedProperties: true }); // 写真の無いロボ（thumb が無い）も、そのまま入れる
 
 const robots = (uid: string) => db.collection('users').doc(uid).collection('robots');
+// 戦績の整理券（tickets/{id}）。画面からは読めない・書けない（firestore.rules の「ほかは全部だめ」）。
+// 結果を受け取ったら消す（同じ整理券は一回だけ）。結果が届かなかった整理券は残る（いまは量が少ないので、そのまま）
+const tickets = db.collection('tickets');
+const TICKET_ID = /^[A-Za-z0-9_-]{10,200}$/;
 // ガレージに何体いるか（上限を超えて数えない）
 async function garageCount(uid: string, limit: number) {
   return (await robots(uid).select().limit(limit).get()).size;
@@ -139,7 +145,9 @@ export const api = onRequest(
     const isGarage = req.path.endsWith('/garage');
     const isRival = req.path.endsWith('/rival');
     const isWin = req.path.endsWith('/robots/win');
-    if (!isAnalyze && !isRobots && !isFix && !isGarage && !isRival && !isWin) {
+    const isStart = req.path.endsWith('/battle/start');
+    const isEnd = req.path.endsWith('/battle/end');
+    if (!isAnalyze && !isRobots && !isFix && !isGarage && !isRival && !isWin && !isStart && !isEnd) {
       res.status(404).json({ error: 'not found' });
       return;
     }
@@ -222,12 +230,100 @@ export const api = onRequest(
           // もらえる経験値は、章（敵のレベル）・何体目か（ボスは2倍）・ロボのレベルから、ここで決める
           const w = addWin(robot, inp.chapter, inp.slot);
           const next = afterWin(story, inp.chapter, inp.slot);
-          tx.update(ref, { exp: w.exp, expV: EXP_VERSION, level: w.level });
-          tx.set(userRef, { lastWinAt: now, lastWin: { chapter: inp.chapter, slot: inp.slot }, story: next }, { merge: true });
+          tx.update(ref, { exp: w.exp, expV: EXP_VERSION, level: w.level, 'record.story.win': FieldValue.increment(1) });
+          tx.set(
+            userRef,
+            {
+              lastWinAt: now,
+              lastWin: { chapter: inp.chapter, slot: inp.slot },
+              story: next,
+              stats: { story: { win: FieldValue.increment(1) } }, // 戦績（2026-11-25 から数える）
+            },
+            { merge: true },
+          );
           return { counted: true, exp: w.exp, level: w.level, up: w.up, gain: w.gain, story: next };
         });
         if (out === 'missing') res.status(404).json({ error: 'not found' });
         else res.json(out);
+      } catch (e) {
+        fail(e);
+      }
+      return;
+    }
+
+    // ── 戦績：バトルを始めるときに、整理券を一枚もらう（コンピュータと対戦・ふたりで対戦） ──
+    // ふたりで対戦は、部屋（rooms/main）にいまあるバトルに、その人とそのロボが入っているときだけ。
+    // 整理券の名前は「人＋バトル」なので、一つのバトルで一枚だけ。バトルが始まって1分をすぎたら、もうもらえない
+    if (isStart) {
+      try {
+        const mode = body?.mode;
+        const hash = String(body?.hash ?? '');
+        if (!isMode(mode) || !isHash(hash)) {
+          res.status(400).json({ error: 'bad battle' });
+          return;
+        }
+        const now = Date.now();
+        if (mode === 'cpu') {
+          const ref = tickets.doc();
+          await ref.set({ uid: user.uid, mode, hash, at: now });
+          res.json({ ticket: ref.id });
+          return;
+        }
+        const bid = String(body?.battle ?? '');
+        if (!/^[a-z0-9]{4,40}$/.test(bid)) {
+          res.status(400).json({ error: 'bad battle' });
+          return;
+        }
+        const b = (await db.collection('rooms').doc('main').get()).data()?.battle;
+        const ok =
+          b && b.id === bid && Array.isArray(b.p) && b.p.includes(user.uid) && b.p[0] !== b.p[1] &&
+          b.chars?.[user.uid]?.seed === hash && now - Number(b.at) < 60_000;
+        if (!ok) {
+          res.json({ ticket: null });
+          return;
+        }
+        const id = `${user.uid}_${bid}`;
+        const ref = tickets.doc(id);
+        const made = await ref.create({ uid: user.uid, mode, hash, at: now }).then(
+          () => true,
+          () => false, // もうある（同じバトルで二枚目）
+        );
+        res.json({ ticket: made ? id : null });
+      } catch (e) {
+        fail(e);
+      }
+      return;
+    }
+
+    // ── 戦績：バトルが終わったら、整理券と結果を受け取って数える（整理券は消す＝一回だけ） ──
+    // 短すぎるバトル・古すぎる整理券・一日の上限をこえた分は、数えない
+    if (isEnd) {
+      try {
+        const id = String(body?.ticket ?? '');
+        const result = body?.result;
+        if (!TICKET_ID.test(id) || !isResult(result)) {
+          res.status(400).json({ error: 'bad result' });
+          return;
+        }
+        const ref = tickets.doc(id);
+        const userRef = db.collection('users').doc(user.uid);
+        const counted = await db.runTransaction(async (tx) => {
+          const t = await tx.get(ref);
+          const d = t.data();
+          if (!t.exists || !d || d.uid !== user.uid || !isMode(d.mode) || !isHash(String(d.hash))) return false;
+          const robotRef = robots(user.uid).doc(String(d.hash));
+          const [me, robot] = await Promise.all([tx.get(userRef), tx.get(robotRef)]);
+          const now = Date.now();
+          const age = now - Number(d.at);
+          const day = jstDay(now);
+          const n = me.data()?.recDay === day ? Number(me.data()?.recCount ?? 0) : 0;
+          tx.delete(ref);
+          if (!(age >= MIN_BATTLE_MS && age <= TICKET_LIFE_MS) || n >= DAILY_RECORDS) return false;
+          tx.set(userRef, { stats: { [d.mode]: { [result]: FieldValue.increment(1) } }, recDay: day, recCount: n + 1 }, { merge: true });
+          if (robot.exists) tx.update(robotRef, { [`record.${d.mode}.${result}`]: FieldValue.increment(1) });
+          return true;
+        });
+        res.json({ counted });
       } catch (e) {
         fail(e);
       }

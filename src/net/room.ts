@@ -370,6 +370,7 @@ export class RoomSession {
 
 /** バトルの画面に渡す、対戦相手とのやりとり */
 export interface NetBattle {
+  battleId: string; // バトルの番号（戦績の整理券をもらうため）
   opponent: Character;
   me: Character;
   opponentName: string;
@@ -416,6 +417,7 @@ export function makeNetBattle(session: RoomSession, b: RoomBattle): NetBattle {
     if (!s.players.some((p) => p.uid === opp) && s.players.length > 0) markGone();
   });
   return {
+    battleId: b.id,
     opponent: b.chars[opp],
     me: { ...b.chars[me], thumb: session.myChar?.thumb }, // 自分の写真は、自分の画面でだけ使う
     opponentName: b.names[opp] ?? 'あいて',

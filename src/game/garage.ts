@@ -13,6 +13,7 @@ import { needsTextFix, withFixedText } from './kanji';
 import { sanitizeSpec } from './spec';
 import { addWin, EXP_VERSION, expOf, growthOf } from './level';
 import { afterWin, canWin, EMPTY_STORY, readStory, type StoryProgress } from './progress';
+import { addResult, EMPTY_RECORD, MIN_BATTLE_MS, readRecord, type BattleRecord, type BattleResult, type RecordMode } from './record';
 import { currentUser, firestore, useUser } from '../lib/firebase';
 import { postApi } from '../lib/api';
 
@@ -162,6 +163,104 @@ export function useStory(): StoryProgress | null {
   return user === undefined && CLOUD ? null : local;
 }
 
+// ── 戦績（2026-11-25。src/game/record.ts） ──
+//   ・クラウド：Firestore の users/{uid} の stats と、ガレージのロボの record（書くのはサーバーだけ）
+//   ・手元・ログインしていないとき：このスマホの中（localStorage と、このスマホのガレージのロボ）
+const STATS_KEY = 'pb.stats.v1';
+const statsWatchers = new Set<() => void>();
+function loadLocalStats(): BattleRecord {
+  try {
+    return readRecord(JSON.parse(localStorage.getItem(STATS_KEY) ?? 'null'));
+  } catch {
+    return EMPTY_RECORD;
+  }
+}
+function addLocalResult(seed: string, mode: RecordMode | 'story', result: BattleResult) {
+  try {
+    localStorage.setItem(STATS_KEY, JSON.stringify(addResult(loadLocalStats(), mode, result)));
+  } catch {
+    // 入れられなくても、遊ぶのは続けられる
+  }
+  const cur = findBySeed(seed);
+  if (cur) updateCharacter({ ...cur, record: addResult(readRecord(cur.record), mode, result) });
+  statsWatchers.forEach((f) => f());
+}
+
+/** プレイヤーの戦績（読みこみ中は null） */
+export function useStats(): BattleRecord | null {
+  const user = useUser();
+  const db = firestore();
+  const uid = CLOUD && db && user ? user.uid : null;
+  const [local, setLocal] = useState(loadLocalStats);
+  const [cloud, setCloud] = useState<BattleRecord | null>(null);
+  useEffect(() => {
+    const f = () => setLocal(loadLocalStats());
+    statsWatchers.add(f);
+    return () => void statsWatchers.delete(f);
+  }, []);
+  useEffect(() => {
+    setCloud(null);
+    if (!uid || !db) return;
+    return onSnapshot(
+      doc(db, 'users', uid),
+      (s) => setCloud(readRecord(s.data()?.stats)),
+      (e) => {
+        console.warn('[stats]', e);
+        setCloud(EMPTY_RECORD);
+      },
+    );
+  }, [uid, db]);
+  if (uid) return cloud;
+  return user === undefined && CLOUD ? null : local;
+}
+
+/** バトルの整理券（クラウドではサーバーが出す番号。手元では、始めた時刻だけ） */
+export interface BattleTicket {
+  id: string | null; // クラウドの整理券（手元では null）
+  mode: RecordMode;
+  seed: string;
+  at: number;
+}
+
+const cloudNow = () => CLOUD && !!firestore() && !!currentUser();
+
+/**
+ * バトルを始めるときに呼ぶ。自分のガレージのロボで戦うときだけ、整理券をもらう。
+ * battle＝ふたりで対戦のバトルの番号。もらえなかったとき（つながらないなど）は null（そのバトルは数えない）
+ */
+export async function startRecord(mode: RecordMode, c: Character, battle?: string): Promise<BattleTicket | null> {
+  if (c.source !== 'ai' && c.source !== 'local') return null;
+  const at = Date.now();
+  if (!cloudNow()) return { id: null, mode, seed: c.seed, at };
+  try {
+    const r = await postApi('/api/battle/start', { mode, hash: c.seed, battle }, { needLogin: true });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const id = (await r.json()).ticket;
+    return typeof id === 'string' ? { id, mode, seed: c.seed, at } : null;
+  } catch (e) {
+    console.warn('[record] start', e);
+    return null;
+  }
+}
+
+/** バトルが終わったら呼ぶ。数えてもらえたら true */
+export async function endRecord(t: BattleTicket, result: BattleResult): Promise<boolean> {
+  try {
+    if (t.id) {
+      const r = await postApi('/api/battle/end', { ticket: t.id, result }, { needLogin: true });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return !!(await r.json()).counted;
+    }
+    // 手元：サーバーと同じく、短すぎるバトルは数えない
+    if (Date.now() - t.at < MIN_BATTLE_MS) return false;
+    addLocalResult(t.seed, t.mode, result);
+    return true;
+  } catch (e) {
+    console.warn('[record] end', e);
+    return false;
+  }
+}
+
 export interface Garage {
   list: Character[];
   ready: boolean; // 一覧を読み終えたか
@@ -289,6 +388,7 @@ export function useGarage(): Garage {
     }
     const w = addWin(cur, chapter, slot);
     updateCharacter({ ...cur, exp: w.exp, expV: EXP_VERSION, level: w.level });
+    addLocalResult(cur.seed, 'story', 'win');
     setLocal(loadHangar());
     const next = afterWin(story, chapter, slot);
     saveLocalStory(next);
