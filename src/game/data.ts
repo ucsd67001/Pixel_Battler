@@ -123,14 +123,4 @@ export const ULT_TABLE: Record<UltStyle, { label: string; hits: number }> = {
   rush: { label: 'ラッシュ', hits: 5 },
 };
 
-export const WEAPON_LABEL: Record<WeaponType, string> = {
-  none: 'パンチ',
-  sword: 'ソード',
-  lance: 'ランス',
-  rifle: 'ライフル',
-  hammer: 'ハンマー',
-  shield: 'シールド',
-  claw: 'クロー',
-};
-
 export const ULT_POWER = 3.0;

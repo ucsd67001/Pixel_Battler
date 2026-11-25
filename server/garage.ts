@@ -9,8 +9,8 @@ import { localSpec } from '../src/game/fallback';
 import { isHash, sanitizeSpec } from '../src/game/spec';
 import type { Character, CharacterSpec } from '../src/game/types';
 import { BOSS_SLOT, MAX_CHAPTER } from '../src/game/progress';
+import { GARAGE_LIMIT } from '../src/game/storage';
 
-export const GARAGE_LIMIT = 30;
 export const FAMILY_GARAGE_LIMIT = 100; // 家族（ALLOWED_EMAILS）は100体まで（2026-11-23 から）
 export const garageLimit = (family: boolean) => (family ? FAMILY_GARAGE_LIMIT : GARAGE_LIMIT);
 const THUMB = /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/;
@@ -53,16 +53,13 @@ export function makeRobot(inp: RobotInput, cached: CharacterSpec | null): Charac
   if (inp.createdAt) c.createdAt = inp.createdAt;
   // 育てた分（経験値・レベル）は、画面から届いても受け取らない。どのロボも Lv1 から
   delete c.exp;
-  delete c.expV;
   delete c.level;
   delete c.fightLevel;
   return c;
 }
 
 // ── ストーリーで勝ったときの経験値（2026-11-23。docs/STORY.md の段階3）──
-// ずるの歯止め（はじめはこれで十分）：一人につき、前の勝ちから MIN_WIN_GAP より短い知らせは数えない。
-// バトルは演出があるので、どんなに速くても1戦に30秒ほどかかる
-export const MIN_WIN_GAP = 20 * 1000;
+// ずるの歯止め：一人につき、前の勝ちから MIN_BATTLE_MS（20秒。src/game/record.ts）より短い知らせは数えない
 
 export interface WinInput {
   hash: string;

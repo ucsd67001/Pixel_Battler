@@ -17,16 +17,16 @@ import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore, type DocumentReference } from 'firebase-admin/firestore';
 import { analyzeImage, cacheKey, refreshText, type SpecCache } from '../../server/analyze';
-import { garageLimit, makeRobot, MIN_WIN_GAP, readRobotInput, readWinInput } from '../../server/garage';
-import { addWin, EXP_VERSION, expOf, growthOf } from '../../src/game/level';
+import { garageLimit, makeRobot, readRobotInput, readWinInput } from '../../server/garage';
+import { expOf, growthOf, storyWin } from '../../src/game/level';
 import { toRival } from '../../server/rival';
 import { needsTextFix, specHardKanji, withFixedText } from '../../src/game/kanji';
 import { isHash, sanitizeSpec } from '../../src/game/spec';
-import { afterWin, canWin, readStory } from '../../src/game/progress';
-import { DAILY_RECORDS, isMode, isResult, jstDay, MIN_BATTLE_MS, TICKET_LIFE_MS } from '../../src/game/record';
+import { readStory } from '../../src/game/progress';
+import { DAILY_RECORDS, isMode, isResult, jstDay, MIN_BATTLE_MS, readRecord, TICKET_LIFE_MS } from '../../src/game/record';
+import { migrateOnce } from './migrate';
 import { checkNickname, readNickname } from '../../src/game/profile';
 import { buildRanking, type RawPlayer, type RawRobot } from '../../src/game/ranking';
-import { readRecord } from '../../src/game/record';
 import type { Character, CharacterSpec } from '../../src/game/types';
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
@@ -47,6 +47,8 @@ const robots = (uid: string) => db.collection('users').doc(uid).collection('robo
 // 結果を受け取ったら消す（同じ整理券は一回だけ）。結果が届かなかった整理券は残る（いまは量が少ないので、そのまま）
 const tickets = db.collection('tickets');
 const TICKET_ID = /^[A-Za-z0-9_-]{10,200}$/;
+// 部屋にいる人の「いるよ」が、これより古ければ、いないことにする（src/net/room.ts の STALE_MS と同じ）
+const ROOM_STALE_MS = 60_000;
 // ガレージに何体いるか（上限を超えて数えない）
 async function garageCount(uid: string, limit: number) {
   return (await robots(uid).select().limit(limit).get()).size;
@@ -87,7 +89,7 @@ async function loadRankingRaw() {
       storyAt: Number(u.storyAt) || 0,
     };
   });
-  const fields = ['seed', 'spec', 'rank', 'level', 'exp', 'expV', 'record', 'stats'];
+  const fields = ['seed', 'spec', 'rank', 'level', 'exp', 'record', 'stats'];
   const top = (field: string) => db.collectionGroup('robots').orderBy(field, 'desc').limit(ROBOT_FETCH).select(...fields).get();
   const snaps = await Promise.all([top('level'), top('record.cpu.win'), top('record.room.win')]);
   const seen = new Set<string>();
@@ -158,7 +160,7 @@ function isFamily(email: string | undefined) {
 
 // 一日の回数を数える（日本時間の日付ごと）。ok／mine＝その人の分を使い切った／all＝家族以外の全員の分を使い切った
 async function countUp(uid: string, family: boolean): Promise<'ok' | 'mine' | 'all'> {
-  const day = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  const day = jstDay();
   const ref = db.collection('usage').doc(`${uid}_${day}`);
   const allRef = db.collection('usage').doc(`_guests_${day}`);
   return db.runTransaction(async (tx) => {
@@ -219,6 +221,9 @@ export const api = onRequest(
       return;
     }
 
+    // 本番のデータの書き直しが残っていれば、先に済ませる（functions/src/migrate.ts。一度だけ）
+    await migrateOnce(db);
+
     // ログインを確かめる（メールアドレスの確認が済んだ Google アカウントなら、だれでも）
     const user = await verify(req, res);
     if (!user) return;
@@ -268,7 +273,7 @@ export const api = onRequest(
     }
 
     // ── ストーリーで勝ったロボに、経験値を足す（勝ったロボだけ。負けても減らない） ──
-    // 前の勝ちから MIN_WIN_GAP より短い知らせは数えない（users/{uid} の lastWinAt。画面からは書けない場所）。
+    // 前の勝ちから MIN_BATTLE_MS（20秒）より短い知らせは数えない（users/{uid} の lastWinAt。画面からは書けない場所）。
     // ストーリーの進み具合（users/{uid} の story）も、ここで進める。開いていない章・とばした敵の勝ちは数えない
     if (isWin) {
       try {
@@ -286,19 +291,15 @@ export const api = onRequest(
           const last = Number(me.data()?.lastWinAt ?? 0);
           const robot = snap.data() as Character;
           const story = readStory(me.data()?.story);
-          if (now - last < MIN_WIN_GAP || !canWin(story, inp.chapter, inp.slot)) {
-            const g = growthOf(expOf(robot));
-            return { counted: false, exp: g.exp, level: g.level, up: false, gain: 0, story };
-          }
-          // もらえる経験値は、章（敵のレベル）・何体目か（ボスは2倍）・ロボのレベルから、ここで決める
-          const w = addWin(robot, inp.chapter, inp.slot);
-          const next = afterWin(story, inp.chapter, inp.slot);
-          tx.update(ref, { exp: w.exp, expV: EXP_VERSION, level: w.level, 'record.story.win': FieldValue.increment(1) });
+          // もらえる経験値は、章（敵のレベル）・何体目か（ボスは2倍）・ロボのレベルから、ここで決める（level.ts の storyWin）
+          const w = storyWin(robot, story, inp.chapter, inp.slot, now - last < MIN_BATTLE_MS);
+          if (!w.counted) return w;
+          const next = w.story;
+          tx.update(ref, { exp: w.exp, level: w.level, 'record.story.win': FieldValue.increment(1) });
           tx.set(
             userRef,
             {
               lastWinAt: now,
-              lastWin: { chapter: inp.chapter, slot: inp.slot },
               story: next,
               stats: { story: { win: FieldValue.increment(1) } }, // 戦績（2026-11-25 から数える）
               // 進み具合が先へ進んだ時刻（ランキングで、同じ進みなら先に着いた人が上。2026-11-25 から）
@@ -306,7 +307,7 @@ export const api = onRequest(
             },
             { merge: true },
           );
-          return { counted: true, exp: w.exp, level: w.level, up: w.up, gain: w.gain, story: next };
+          return w;
         });
         if (out === 'missing') res.status(404).json({ error: 'not found' });
         else res.json(out);
@@ -354,7 +355,9 @@ export const api = onRequest(
 
     // ── 戦績：バトルを始めるときに、整理券を一枚もらう（コンピュータと対戦・ふたりで対戦） ──
     // ふたりで対戦は、部屋（rooms/main）にいまあるバトルに、その人とそのロボが入っているときだけ。
-    // 整理券の名前は「人＋バトル」なので、一つのバトルで一枚だけ。バトルが始まって1分をすぎたら、もうもらえない
+    // 整理券の名前は「人＋バトル」なので、一つのバトルで一枚だけ。バトルが始まって1分をすぎたら、もうもらえない。
+    // コンピュータと対戦の整理券は、一人一枚（2026-11-25。新しいバトルを始めると、前の整理券は消える）。
+    // 何枚も同時にもらって、20秒後にまとめて勝ちを数える、ができないように（勝ちを数えられるのは、20秒に1回まで）
     if (isStart) {
       try {
         const mode = body?.mode;
@@ -365,7 +368,7 @@ export const api = onRequest(
         }
         const now = Date.now();
         if (mode === 'cpu') {
-          const ref = tickets.doc();
+          const ref = tickets.doc(`${user.uid}_cpu`);
           await ref.set({ uid: user.uid, mode, hash, at: now });
           res.json({ ticket: ref.id });
           return;
@@ -376,9 +379,16 @@ export const api = onRequest(
           return;
         }
         const b = (await db.collection('rooms').doc('main').get()).data()?.battle;
+        const opp = Array.isArray(b?.p) ? b.p.find((u: unknown) => u !== user.uid) : undefined;
+        // 相手も、ほんとうに部屋にいる人か（部屋にいる人の札は、本人しか書けない。firestore.rules）。
+        // バトルは画面が書くので、でたらめな相手の名前でバトルを書いて勝ちを作る、ができないように（2026-11-25）
+        const oppSeen =
+          typeof opp === 'string' && opp
+            ? Number((await db.collection('rooms').doc('main').collection('players').doc(opp).get()).data()?.seen ?? 0)
+            : 0;
         const ok =
-          b && b.id === bid && Array.isArray(b.p) && b.p.includes(user.uid) && b.p[0] !== b.p[1] &&
-          b.chars?.[user.uid]?.seed === hash && now - Number(b.at) < 60_000;
+          b && b.id === bid && Array.isArray(b.p) && b.p.length === 2 && b.p.includes(user.uid) && b.p[0] !== b.p[1] &&
+          b.chars?.[user.uid]?.seed === hash && now - Number(b.at) < 60_000 && now - oppSeen < ROOM_STALE_MS;
         if (!ok) {
           res.json({ ticket: null });
           return;

@@ -327,16 +327,20 @@ export function Battle({
     await s.wait(0.3);
   };
 
-  // 二台の計算がずれていたら（めったにない）、動いた人の HP に合わせる
+  // 二台の計算がずれていたら（めったにない）、動いた人の HP に合わせる。
+  // ただし、合わせるのは差が小さいとき（最大HPの15%まで）だけ。大きくちがう HP が届いたら、書きかえられたものとみなして使わない
   const syncHp = (hp: [number, number]) => {
     ([0, 1] as const).forEach((i) => {
-      if (typeof hp[i] === 'number' && st.f[i].hp !== hp[i]) {
-        console.warn('[net] HP がずれていたので合わせました', i, st.f[i].hp, '→', hp[i]);
-        st.f[i].hp = hp[i];
-        if (hp[i] <= 0 && !st.over) {
-          st.over = true;
-          st.winner = i === 0 ? 1 : 0;
-        }
+      if (typeof hp[i] !== 'number' || !Number.isFinite(hp[i]) || st.f[i].hp === hp[i]) return;
+      if (Math.abs(st.f[i].hp - hp[i]) > st.f[i].c.stats.hp * 0.15) {
+        console.warn('[net] 届いた HP が大きくちがうので、使いません', i, st.f[i].hp, hp[i]);
+        return;
+      }
+      console.warn('[net] HP がずれていたので合わせました', i, st.f[i].hp, '→', hp[i]);
+      st.f[i].hp = hp[i];
+      if (hp[i] <= 0 && !st.over) {
+        st.over = true;
+        st.winner = i === 0 ? 1 : 0;
       }
     });
   };

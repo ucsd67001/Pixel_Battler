@@ -1,4 +1,6 @@
-// キャラの設計図（AIが写真から決める部分）と、ゲームで使う形
+// ロボの設計図（AIが写真から決める部分）と、ゲームで使う形
+
+import type { BattleRecord } from './record';
 
 export const FORMS = ['humanoid', 'beast', 'floater'] as const;
 // 属性（2026-11-23 から6種類）：火・水・地・風の4すくみと、光・夜。
@@ -99,10 +101,9 @@ export interface Character {
   // ストーリーで育てた分（2026-11-23。src/game/level.ts）。経験値の合計と、そこから出したレベル。
   // ガレージのロボだけが持つ。書きこむのはサーバーだけ（/api/robots/win）。stats は、もとの（Lv1 の）数字のまま
   exp?: number;
-  expV?: number; // 経験値の表の版（2026-11-25 から 2。無いものは前の表。level.ts の expOf）
   level?: number;
   // そのロボの戦績（2026-11-25 から数える。src/game/record.ts の BattleRecord の形。書きこむのはサーバーだけ）
-  record?: unknown;
+  record?: Partial<BattleRecord>;
   // ストーリーのバトルで、そのレベルの数字にしてあるロボ（atLevel で付く）。バトルの計算が、SP のたまり方とぼうぎょの効き方を合わせるのに使う
   fightLevel?: number;
 }

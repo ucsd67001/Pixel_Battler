@@ -11,8 +11,8 @@ import type { Character } from './types';
 import { deleteCharacter, findBySeed, garageFullMsg, GARAGE_LIMIT, loadHangar, saveCharacter, updateCharacter } from './storage';
 import { needsTextFix, withFixedText } from './kanji';
 import { sanitizeSpec } from './spec';
-import { addWin, EXP_VERSION, expOf, growthOf } from './level';
-import { afterWin, canWin, EMPTY_STORY, readStory, type StoryProgress } from './progress';
+import { storyWin, type WinResult } from './level';
+import { EMPTY_STORY, readStory, type StoryProgress } from './progress';
 import { checkNickname, readNickname } from './profile';
 import { addResult, EMPTY_RECORD, MIN_BATTLE_MS, readRecord, type BattleRecord, type BattleResult, type RecordMode } from './record';
 import { currentUser, firestore, useUser } from '../lib/firebase';
@@ -105,15 +105,8 @@ async function fixTexts(list: Character[], cloud: boolean, changed: () => void) 
   }
 }
 
-// ストーリーで勝ったときの知らせの答え。counted＝数えたか（前の勝ちからすぐの知らせは数えない）・up＝レベルが上がったか
-export interface WinResult {
-  counted: boolean;
-  exp: number;
-  level: number;
-  up: boolean;
-  gain?: number; // もらえた経験値（ボスは2倍・ずっと下のレベルの敵は少し）
-  story: StoryProgress;
-}
+// ストーリーで勝ったときの知らせの答え（level.ts の storyWin。サーバーも同じ形で答える）
+export type { WinResult } from './level';
 
 // ── ストーリーの進み具合 ──
 //   ・クラウド：Firestore の users/{uid} の story（見るのは本人だけ。書くのはサーバーだけ。/api/robots/win が進める）
@@ -136,32 +129,48 @@ function saveLocalStory(p: StoryProgress) {
   storyWatchers.forEach((f) => f());
 }
 
-/** ストーリーの進み具合（読みこみ中は null） */
-export function useStory(): StoryProgress | null {
+/**
+ * users/{uid} の欄を一つ読むフック（ストーリーの進み具合・戦績・ニックネームが使う）。
+ *   ・クラウド：onSnapshot（同じ文書を見るフックが何本あっても、Firestore の SDK が一本にまとめて読む）
+ *   ・手元・ログインしていないとき：loadLocal で読む（watchers に知らせが来たら読み直す）
+ * 読みこみ中は null。読めなかったときは failed
+ */
+function useUserField<T>(
+  tag: string,
+  read: (data: Record<string, unknown> | undefined) => T,
+  loadLocal: () => T,
+  watchers: Set<() => void>,
+  failed: T,
+): { value: T | null; uid: string | null } {
   const user = useUser();
   const db = firestore();
   const uid = CLOUD && db && user ? user.uid : null;
-  const [local, setLocal] = useState(loadLocalStory);
-  const [cloud, setCloud] = useState<StoryProgress | null>(null);
+  const [local, setLocal] = useState(loadLocal);
+  const [cloud, setCloud] = useState<T | null>(null);
   useEffect(() => {
-    const f = () => setLocal(loadLocalStory());
-    storyWatchers.add(f);
-    return () => void storyWatchers.delete(f);
-  }, []);
+    const f = () => setLocal(loadLocal());
+    watchers.add(f);
+    return () => void watchers.delete(f);
+  }, []); // loadLocal と watchers は、どれもこのファイルの中の決まったもの（変わらない）
   useEffect(() => {
     setCloud(null);
     if (!uid || !db) return;
     return onSnapshot(
       doc(db, 'users', uid),
-      (s) => setCloud(readStory(s.data()?.story)),
+      (s) => setCloud(read(s.data())),
       (e) => {
-        console.warn('[story]', e);
-        setCloud(EMPTY_STORY);
+        console.warn(`[${tag}]`, e);
+        setCloud(failed);
       },
     );
   }, [uid, db]);
-  if (uid) return cloud;
-  return user === undefined && CLOUD ? null : local;
+  const value = uid ? cloud : user === undefined && CLOUD ? null : local;
+  return { value, uid };
+}
+
+/** ストーリーの進み具合（読みこみ中は null） */
+export function useStory(): StoryProgress | null {
+  return useUserField('story', (d) => readStory(d?.story), loadLocalStory, storyWatchers, EMPTY_STORY).value;
 }
 
 // ── 戦績（2026-11-25。src/game/record.ts） ──
@@ -189,30 +198,7 @@ function addLocalResult(seed: string, mode: RecordMode | 'story', result: Battle
 
 /** プレイヤーの戦績（読みこみ中は null） */
 export function useStats(): BattleRecord | null {
-  const user = useUser();
-  const db = firestore();
-  const uid = CLOUD && db && user ? user.uid : null;
-  const [local, setLocal] = useState(loadLocalStats);
-  const [cloud, setCloud] = useState<BattleRecord | null>(null);
-  useEffect(() => {
-    const f = () => setLocal(loadLocalStats());
-    statsWatchers.add(f);
-    return () => void statsWatchers.delete(f);
-  }, []);
-  useEffect(() => {
-    setCloud(null);
-    if (!uid || !db) return;
-    return onSnapshot(
-      doc(db, 'users', uid),
-      (s) => setCloud(readRecord(s.data()?.stats)),
-      (e) => {
-        console.warn('[stats]', e);
-        setCloud(EMPTY_RECORD);
-      },
-    );
-  }, [uid, db]);
-  if (uid) return cloud;
-  return user === undefined && CLOUD ? null : local;
+  return useUserField('stats', (d) => readRecord(d?.stats), loadLocalStats, statsWatchers, EMPTY_RECORD).value;
 }
 
 // ── ニックネーム（2026-11-25。src/game/profile.ts） ──
@@ -233,28 +219,7 @@ export class NicknameError extends Error {}
 
 /** 自分のニックネーム（読みこみ中は null。決めていなければ ''）と、決める・変える（空で消す） */
 export function useNickname(): { nickname: string | null; save(n: string): Promise<string> } {
-  const user = useUser();
-  const db = firestore();
-  const uid = CLOUD && db && user ? user.uid : null;
-  const [local, setLocal] = useState(loadLocalNick);
-  const [cloud, setCloud] = useState<string | null>(null);
-  useEffect(() => {
-    const f = () => setLocal(loadLocalNick());
-    nickWatchers.add(f);
-    return () => void nickWatchers.delete(f);
-  }, []);
-  useEffect(() => {
-    setCloud(null);
-    if (!uid || !db) return;
-    return onSnapshot(
-      doc(db, 'users', uid),
-      (s) => setCloud(readNickname(s.data()?.nickname)),
-      (e) => {
-        console.warn('[nickname]', e);
-        setCloud('');
-      },
-    );
-  }, [uid, db]);
+  const { value: nickname, uid } = useUserField('nickname', (d) => readNickname(d?.nickname), loadLocalNick, nickWatchers, '');
   const save = async (n: string): Promise<string> => {
     const r = checkNickname(n);
     if (!r.ok) throw new NicknameError(r.reason);
@@ -273,7 +238,6 @@ export function useNickname(): { nickname: string | null; save(n: string): Promi
     nickWatchers.forEach((f) => f());
     return r.nickname;
   };
-  const nickname = uid ? cloud : user === undefined && CLOUD ? null : local;
   return { nickname, save };
 }
 
@@ -444,18 +408,13 @@ export function useGarage(): Garage {
     // 手元・ログインしていないとき：このスマホの中のロボと進み具合に足す
     const cur = findBySeed(c.seed);
     if (!cur) throw new Error('not found');
-    const story = loadLocalStory();
-    if (!canWin(story, chapter, slot)) {
-      const g = growthOf(expOf(cur));
-      return { counted: false, exp: g.exp, level: g.level, up: false, gain: 0, story };
-    }
-    const w = addWin(cur, chapter, slot);
-    updateCharacter({ ...cur, exp: w.exp, expV: EXP_VERSION, level: w.level });
+    const w = storyWin(cur, loadLocalStory(), chapter, slot);
+    if (!w.counted) return w;
+    updateCharacter({ ...cur, exp: w.exp, level: w.level });
     addLocalResult(cur.seed, 'story', 'win');
     setLocal(loadHangar());
-    const next = afterWin(story, chapter, slot);
-    saveLocalStory(next);
-    return { counted: true, exp: w.exp, level: w.level, up: w.up, gain: w.gain, story: next };
+    saveLocalStory(w.story);
+    return w;
   };
 
   return {

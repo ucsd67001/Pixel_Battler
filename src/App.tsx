@@ -5,6 +5,7 @@ import { Title } from './ui/Title';
 import { About } from './ui/About';
 import { MyPage } from './ui/MyPage';
 import { Ranking } from './ui/Ranking';
+import { NavMenu, type NavTarget } from './ui/NavMenu';
 import { Create } from './ui/Create';
 import { Hangar } from './ui/Hangar';
 import { prefetchRival } from './game/rival';
@@ -14,6 +15,8 @@ import { ChapterView, StoryBattle, StoryMap } from './ui/Story';
 import { BOSS_SLOT, chapterLevel, enemyAt } from './game/story';
 import { advantageText, ELEMENT_INFO } from './game/data';
 import type { NetBattle, RoomSession } from './net/room';
+
+const NAV_SCREENS: NavTarget[] = ['title', 'pick', 'story', 'room', 'create', 'hangar', 'mypage', 'ranking', 'about'];
 
 // ロボの見本の画面は開発中だけ。本番のファイルには入れない
 const Showroom = lazy(() => import('./ui/Showroom').then((m) => ({ default: m.Showroom })));
@@ -87,9 +90,37 @@ export function App() {
       {muted ? '🔇' : '🔊'}
     </button>
   );
+
+  // スマホのメニュー（src/ui/NavMenu.tsx）から、ほかの画面へ
+  const startPick = () => {
+    void prefetchRival(); // あいてになる、ほかの人のロボを先にもらっておく（コンピュータと対戦だけ）
+    setScreen({ name: 'pick' });
+  };
+  const navGo = (to: NavTarget) => {
+    // ふたりで対戦の部屋からほかの画面へ行くときは、部屋から出る（「◀ タイトル」と同じ）
+    if (screen.name === 'room' && session) {
+      session.leave();
+      session.close();
+      setSession(null);
+    }
+    if (to === 'title') title();
+    else if (to === 'about') about();
+    else if (to === 'pick') startPick();
+    else {
+      if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+      setScreen({ name: to } as Screen);
+    }
+  };
+  // いまの画面が、メニューのどれにあたるか（ストーリーの中の画面は「ストーリーモード」）
+  const navCurrent: NavTarget | null =
+    screen.name === 'chapter' || screen.name === 'storypick' ? 'story' : NAV_SCREENS.includes(screen.name as NavTarget) ? (screen.name as NavTarget) : null;
+  // バトルの最中は、メニューを出さない（まちがえて押して、とちゅうで終わらないように）
+  const inBattle = screen.name === 'battle' || screen.name === 'netbattle' || screen.name === 'storybattle';
+  const showroom = import.meta.env.DEV && location.search.includes('showroom');
   return (
     <>
       {renderScreen()}
+      {!inBattle && !showroom && <NavMenu current={navCurrent} onGo={navGo} />}
       {muteBtn}
     </>
   );
@@ -111,10 +142,7 @@ export function App() {
           onRanking={() => setScreen({ name: 'ranking' })}
           onCreate={() => setScreen({ name: 'create' })}
           onHangar={() => setScreen({ name: 'hangar' })}
-          onPick={() => {
-            void prefetchRival(); // あいてになる、ほかの人のロボを先にもらっておく（コンピュータと対戦だけ）
-            setScreen({ name: 'pick' });
-          }}
+          onPick={startPick}
           onRoom={() => setScreen({ name: 'room' })}
           onStory={() => setScreen({ name: 'story' })}
         />

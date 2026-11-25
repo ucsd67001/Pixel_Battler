@@ -33,14 +33,20 @@ export function specHardKanji(s: CharacterSpec): string[] {
 }
 
 /**
- * 文を書き直すロボか（AI で作ったロボだけ）：
+ * 文を書き直すロボか（AI で作ったロボだけ。一体につき一度だけ）：
  *   ・素手で戦う文になっていない（2026-11-23 より前に作った）
- *   ・まだ書き直していなくて、習わない漢字がある
+ *   ・習わない漢字がある
+ * 一度書き直したロボ（textFixedAt がある）は、もう書き直さない。ただし、素手の決まりより前に
+ * 漢字だけ書き直したロボ（BARE_RULE_AT より前）は、素手の文にするため、もう一度だけ書き直す。
+ * （2026-11-25 まで：AI が武器の言葉を消しきれなかったロボは、ガレージを開くたびに AI を呼び直していた）
  */
 export function needsTextFix(c: Character): boolean {
   if (c.source !== 'ai') return false;
-  return !c.spec.bare || (!c.textFixedAt && specHardKanji(c.spec).length > 0);
+  if (!c.spec.bare) return !c.textFixedAt || c.textFixedAt < BARE_RULE_AT;
+  return !c.textFixedAt && specHardKanji(c.spec).length > 0;
 }
+/** 素手で戦う文に書き直すしくみが、まちがいなく入っていた時刻（2026-11-24 0時、日本時間） */
+const BARE_RULE_AT = Date.UTC(2026, 10, 23, 15);
 
 /** 書き直した設計図の文を、ロボに入れる（強さ・見た目は、そのまま） */
 export function withFixedText(c: Character, spec: CharacterSpec): Character {

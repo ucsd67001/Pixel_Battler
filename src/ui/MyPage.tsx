@@ -93,11 +93,11 @@ function NicknameBox({ googleName }: { googleName: string }) {
     <div className="my-name">
       <b>{nickname === null ? '…' : nickname || googleName || 'プレイヤー'}</b>
       {nickname === null ? null : nickname ? (
-        <small>ニックネーム。これから作るランキングには、この名前が出ます。</small>
+        <small>ニックネーム。ランキングには、この名前が出ます。</small>
       ) : (
         <small>
           {googleName ? 'いまは Google の名前です（自分にしか見えません）。' : 'まだ ニックネームがありません。'}
-          ニックネームを決めると、これから作るランキングに出られます。
+          ニックネームを決めると、ランキングに出られます。
         </small>
       )}
       {nickname !== null && (

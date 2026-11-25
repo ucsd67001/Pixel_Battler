@@ -1,8 +1,9 @@
-// 釣り合いの確かめ：ランダムなキャラ（傾向もランダム）を、コンピュータの敵と何千回も戦わせる。
-// 敵は順番に全員と戦わせ、敵ごとの勝率も出す（どの敵も 45〜55% くらいになるのがよい）。
+// 釣り合いの確かめ：ランダムなロボ（傾向もランダム）を、コンピュータの敵と何千回も戦わせる。
+// 敵は、ほんとうと同じ選び方（pickCpu。属性を先に同じ割合で選ぶ）で出す。
+// 敵ごとの勝率（どの敵も 45〜55% くらい）と、自分の属性ごとの勝率（どの属性も 50% に近い）を出す。
 // 使い方：npm run sim
 
-import { CPU_CHARACTERS } from '../src/game/cpu';
+import { CPU_CHARACTERS, pickCpu } from '../src/game/cpu';
 import { addExp, atLevel, expFor, growthOf } from '../src/game/level';
 import { fight, pct, pick, randomRobot } from './battle-lib';
 import { BOSS_SLOT, CHAPTERS, CHAPTER_SIZE, chapterLevel, enemyAt } from '../src/game/story';
@@ -19,7 +20,7 @@ const byElement: Record<string, [number, number]> = {};
 
 for (let i = 0; i < N; i++) {
   const c = randomRobot('sim' + i);
-  const enemy = CPU_CHARACTERS[i % CPU_CHARACTERS.length];
+  const enemy = pickCpu();
   // プレイヤー役も CPU と同じ考え方で動かす
   const st = fight(c, enemy, (a) => {
     if (a === 'ultimate') ults++;

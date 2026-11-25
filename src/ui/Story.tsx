@@ -310,7 +310,7 @@ function StoryResult({
     );
   const boss = slot === BOSS_SLOT;
   const hasNext = !!chapterOf(no + 1);
-  const gain = win.gain ?? EXP_PER_WIN;
+  const gain = win.gain;
   const full = boss ? EXP_PER_WIN * BOSS_EXP_RATE : EXP_PER_WIN; // 相手のレベルが低くないときの量
   return (
     <div className="story-result">

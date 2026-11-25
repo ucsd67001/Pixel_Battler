@@ -11,6 +11,8 @@
 
 import type { ActionType } from '../game/battle';
 import { withoutGrowth } from '../game/level';
+import { sanitizeSpec } from '../game/spec';
+import { buildCharacter } from '../game/stats';
 import type { Character } from '../game/types';
 import { currentUser, firestore } from '../lib/firebase';
 import {
@@ -69,6 +71,18 @@ export function publicChar(c: Character): Character {
   // ふたりで対戦は、レベルを使わない（どちらも Lv1 の数字で戦う。2026-11-23）
   const { thumb: _thumb, ...rest } = withoutGrowth(c);
   return rest;
+}
+
+/**
+ * 部屋に書かれたロボを、こちらの画面で作り直す（2026-11-25）。
+ * 部屋のロボは、それぞれの画面が書く。そのまま使うと、ありえない HP や長い名前のロボで入ってこられるので、
+ * 設計図を整え（sanitizeSpec）、数字は設計図と写真の印から出し直す（ガレージのロボと同じ計算なので、ふつうのロボは同じ数字になる）。
+ * 二台とも、自分のロボも相手のロボもこれで作るので、二台の計算はそろう
+ */
+export function fairChar(raw: Character): Character {
+  const seed = String(raw?.seed ?? '').slice(0, 80) || 'room';
+  const c = buildCharacter(sanitizeSpec(raw?.spec), seed, raw?.source === 'local' ? 'local' : 'ai');
+  return { ...c, id: String(raw?.id ?? seed).slice(0, 80), createdAt: 0 };
 }
 
 function joinRoom(raw: RawRoom, me: string, full: Character): RawRoom | 'full' {
@@ -418,8 +432,8 @@ export function makeNetBattle(session: RoomSession, b: RoomBattle): NetBattle {
   });
   return {
     battleId: b.id,
-    opponent: b.chars[opp],
-    me: { ...b.chars[me], thumb: session.myChar?.thumb }, // 自分の写真は、自分の画面でだけ使う
+    opponent: fairChar(b.chars[opp]),
+    me: { ...fairChar(b.chars[me]), thumb: session.myChar?.thumb }, // 自分の写真は、自分の画面でだけ使う
     opponentName: b.names[opp] ?? 'あいて',
     seed: b.seed,
     iFirst: b.first === me,

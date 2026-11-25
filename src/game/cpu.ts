@@ -253,12 +253,19 @@ export const CPU_CHARACTERS: Character[] = [DOLGAIA, SHIZUKLEA, BURNHOUND, GALEB
 /** タイトル画面などで使う、いつもの一体 */
 export const CPU_CHARACTER = DOLGAIA;
 
-// 前と同じ敵が続けて出にくいように、前の敵を覚えておく
-let lastCpu = '';
+/** 九体にいる属性（地・水・光は2体ずつ、ほかは1体ずつ） */
+const CPU_ELEMENTS = [...new Set(CPU_CHARACTERS.map((c) => c.spec.element))];
+
+// 敵の選び方（2026-11-25）：先に属性を同じ割合で選び、その属性の敵から一体。
+// 九体から同じ割合で選ぶと、2体いる属性（地・水・光）がよく出て、それに強い属性のロボが得をしていた（火 約45%〜風 約56%）。
+// 前と同じ属性の敵は、続けて出ない（前の属性を覚えておく。どの属性も、出る割合は同じになる）
+let lastElement = '';
 export function pickCpu(rng: () => number = Math.random): Character {
-  const pool = CPU_CHARACTERS.filter((c) => c.id !== lastCpu);
+  const els = CPU_ELEMENTS.filter((e) => e !== lastElement);
+  const e = els[Math.floor(rng() * els.length)];
+  const pool = CPU_CHARACTERS.filter((c) => c.spec.element === e);
   const c = pool[Math.floor(rng() * pool.length)] ?? DOLGAIA;
-  lastCpu = c.id;
+  lastElement = c.spec.element;
   return c;
 }
 

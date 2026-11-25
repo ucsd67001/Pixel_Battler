@@ -9,7 +9,7 @@
 //   ・ふたりで対戦・コンピュータと対戦は、レベルを使わない（みんな Lv1 の数字で戦う）
 
 import type { Character } from './types';
-import { BOSS_SLOT, chapterLevel } from './progress';
+import { afterWin, BOSS_SLOT, canWin, chapterLevel, type StoryProgress } from './progress';
 
 export const MAX_LEVEL = 99;
 /** 同じくらいのレベルの手下に1勝したときの経験値 */
@@ -71,26 +71,10 @@ export function growthOf(exp: number | undefined): Growth {
   return { level, exp: e, into, need, left: need - into };
 }
 
-// ── 前の表で記録した経験値を、いまの表に読みかえる（2026-11-25） ──
-// 前の表（Lv1〜9 は1勝）でためた経験値は、そのまま読むとレベルが下がってしまう（負けても減らない、の決まりに反する）。
-// そこで、前の表でのレベルと、次のレベルまでの進み具合（割合）を、いまの表に移す。
-// いまの表で書いた経験値には expV（EXP_VERSION）が付く
-export const EXP_VERSION = 2;
-const oldWinsToNext = (l: number) => (l >= MAX_LEVEL ? 0 : l < 10 ? 1 : l < 20 ? 2 : l < 40 ? 3 : l < 60 ? 4 : 5);
-
-/** そのロボの経験値（いまの表で） */
-export function expOf(c: { exp?: number; expV?: number }): number {
-  const e = Math.max(0, Math.floor(Number(c.exp) || 0));
-  if (c.expV === EXP_VERSION || !e) return Math.min(MAX_EXP, e);
-  let level = 1;
-  let base = 0;
-  while (level < MAX_LEVEL && e >= base + oldWinsToNext(level) * EXP_PER_WIN) {
-    base += oldWinsToNext(level) * EXP_PER_WIN;
-    level++;
-  }
-  const oldNeed = oldWinsToNext(level) * EXP_PER_WIN;
-  const need = winsToNext(level) * EXP_PER_WIN;
-  return Math.min(MAX_EXP, expAt(level) + (oldNeed ? Math.floor(((e - base) * need) / oldNeed) : 0));
+/** そのロボの経験値（無いロボは 0）。
+ * 2026-11-25 の前の表（Lv1〜9 は1勝）でためた経験値は、本番のデータを一度だけ書き直した（functions/src/migrate.ts）ので、読みかえない */
+export function expOf(c: { exp?: number }): number {
+  return Math.min(MAX_EXP, Math.max(0, Math.floor(Number(c.exp) || 0)));
 }
 
 /** 経験値を gain だけ足した、新しい経験値とレベル（サーバーと、手元の記録の両方が使う）。exp は expOf で読んだもの */
@@ -101,9 +85,32 @@ export function addExp(exp: number, gain: number) {
 }
 
 /** ストーリーの章 chapter の slot 体目に勝ったときの、新しい経験値とレベル（サーバーと、手元の記録の両方が使う） */
-export function addWin(c: { exp?: number; expV?: number }, chapter: number, slot: number) {
+export function addWin(c: { exp?: number }, chapter: number, slot: number) {
   const exp = expOf(c);
   return addExp(exp, expFor(growthOf(exp).level, chapterLevel(chapter), slot === BOSS_SLOT));
+}
+
+/** ストーリーで勝ったときの答え。counted＝数えたか・up＝レベルが上がったか・gain＝もらえた経験値 */
+export interface WinResult {
+  counted: boolean;
+  exp: number;
+  level: number;
+  up: boolean;
+  gain: number;
+  story: StoryProgress;
+}
+
+/**
+ * ストーリーの章 chapter の slot 体目に勝ったときの、新しい経験値・レベル・進み具合（サーバーと、手元の記録の両方が使う）。
+ * まだ戦えない敵（たどり着いていない）・refuse（サーバーが決める。前の勝ちからすぐ、など）のときは数えない
+ */
+export function storyWin(robot: { exp?: number }, story: StoryProgress, chapter: number, slot: number, refuse = false): WinResult {
+  if (refuse || !canWin(story, chapter, slot)) {
+    const g = growthOf(expOf(robot));
+    return { counted: false, exp: g.exp, level: g.level, up: false, gain: 0, story };
+  }
+  const w = addWin(robot, chapter, slot);
+  return { counted: true, exp: w.exp, level: w.level, up: w.up, gain: w.gain, story: afterWin(story, chapter, slot) };
 }
 
 /** ガレージのロボのレベル（経験値から出す。経験値の無いロボは Lv1） */
@@ -146,6 +153,6 @@ export function atLevel(c: Character, level: number): Character {
 
 /** バトルの外へ出すとき（ふたりで対戦など）に、レベルの分と戦績を外す。数字はガレージのもとのまま */
 export function withoutGrowth(c: Character): Character {
-  const { exp: _exp, expV: _expV, level: _level, fightLevel: _fight, record: _record, ...rest } = c;
+  const { exp: _exp, level: _level, fightLevel: _fight, record: _record, ...rest } = c;
   return rest;
 }
