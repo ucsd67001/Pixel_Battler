@@ -95,22 +95,23 @@ export function Title({
           </div>
         ) : (
         <div className="menu">
+          {/* 並び：コンピュータと対戦・ストーリーモード・ふたりで対戦・写真から作る（2026-11-25、持ち主の希望） */}
           {latest && (
-            <button className="btn primary big" onClick={onStory}>
-              ストーリー
+            <button className="btn primary big" onClick={onPick}>
+              コンピュータと対戦
             </button>
           )}
-          <button className={`btn big${latest ? '' : ' primary'}`} onClick={onCreate}>
-            写真から作る
-          </button>
           {latest && (
-            <button className="btn big" onClick={onPick}>
-              コンピュータと対戦
+            <button className="btn big" onClick={onStory}>
+              ストーリーモード
             </button>
           )}
           <button className={`btn room-btn${waiting ? ' waiting' : ''}`} onClick={onRoom}>
             ふたりで対戦
             {peek && <small>{roomLabel(peek)}</small>}
+          </button>
+          <button className={`btn big${latest ? '' : ' primary'}`} onClick={onCreate}>
+            写真から作る
           </button>
           {hangar.length > 0 && (
             <button className="btn ghost" onClick={onHangar}>
