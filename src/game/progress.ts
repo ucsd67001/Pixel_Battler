@@ -3,8 +3,8 @@
 // 章の中身は story.ts（STORY_CHAPTERS と CHAPTERS の数が合っているかは、story.ts で確かめる）
 
 export const MAX_CHAPTER = 99;
-/** いま中身がある章の数（最初の9章） */
-export const STORY_CHAPTERS = 9;
+/** いま中身がある章の数（最初の9章と、10章から先の人物の章） */
+export const STORY_CHAPTERS = 10;
 /** 1章の敵の数（5体目がボス） */
 export const CHAPTER_SIZE = 5;
 export const BOSS_SLOT = CHAPTER_SIZE - 1;

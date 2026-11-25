@@ -126,6 +126,21 @@ button {
   color: var(--cyan);
   text-shadow: 0 0 12px rgba(62, 240, 255, 0.6);
 }
+/* もどるボタンは、折り返さない */
+.bar > .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+/* スマホのせまい幅では、帯の文字のすきまをつめる（「10章 ミレトスの港」でも、右の「敵は Lv28」が切れないように） */
+@media (max-width: 420px) {
+  .bar {
+    gap: 10px;
+    padding: 12px;
+  }
+  .bar-title {
+    letter-spacing: 0.06em;
+  }
+}
 
 /* ── タイトル ── */
 .title-screen .stage-bg {

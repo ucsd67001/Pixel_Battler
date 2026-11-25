@@ -185,7 +185,8 @@ export function StoryBattle({
   useEffect(() => {
     if (fight || !base) return;
     const enemy = atLevel(enemyAt(no, slot)!, chapterLevel(no));
-    const intro = slot === BOSS_SLOT ? `${enemy.spec.name}「${chapterOf(no)!.line}」` : undefined;
+    const line = chapterOf(no)!.lines[slot];
+    const intro = line ? `${enemy.spec.name}「${line}」` : undefined;
     setFight({ player: atLevel(base, levelOf(base)), enemy, intro });
   }, [base, fight, no, slot]);
 

@@ -7,7 +7,7 @@
 
 import type { CharacterSpec } from '../game/types';
 import { CPU_CHARACTERS } from '../game/cpu';
-import { MINIONS } from '../game/minions';
+import { enemyAt } from '../game/story';
 import { StageView } from './StageView';
 import { Battle } from './Battle';
 import { posesOf, proportionsOf, setPose, type PoseName } from '../three/robot';
@@ -72,7 +72,7 @@ export function Showroom() {
   const cpuSel = q.get('cpu');
   const minionCh = Number(q.get('minions')) || 1;
   const list = q.has('minions')
-    ? [...(MINIONS[minionCh - 1] ?? []), CPU_CHARACTERS[minionCh - 1]].filter(Boolean).map((c) => c.spec)
+    ? [0, 1, 2, 3, 4].map((slot) => enemyAt(minionCh, slot)).filter((c) => !!c).map((c) => c.spec)
     : q.has('cpu')
     ? (cpuSel ? cpuSel.split(',').map((i) => CPU_CHARACTERS[Number(i)]).filter(Boolean) : CPU_CHARACTERS).map((c) => c.spec)
     : vary
