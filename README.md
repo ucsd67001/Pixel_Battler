@@ -28,6 +28,7 @@ cd C:\Users\ucsd6\OneDrive\デスクトップ\pixelbattler; npm run dev
 
 - プロジェクト：`pixel-battler-gemu`（表示名 Pixel Battler。`pixel-battler` は使われていた）。料金プランは Blaze（従量課金）
 - **画面**は Hosting、**写真を読む窓口**は Cloud Functions の `api`（東京 asia-northeast1）。同じドメインの `/api/**` が `api` に届く（`firebase.json` の rewrites）
+- **ブラウザの取り置き**（`firebase.json` の headers。2026-11-26 から）：ページ（index.html など）は毎回新しいかを確かめる（`no-cache`）。名前に印の入った `assets/` のファイルは、1年取っておく。前は1時間取っておかれ、出したあとスマホで古い画面のままのことがあった
 - **鍵**は Secret Manager：`OPENAI_API_KEY`（OpenAI の鍵）と `ALLOWED_EMAILS`（家族の Gmail。カンマ区切り。家族は作れる回数が多い）と `HIDDEN_RULE`（開発者だけが知る決まり。中身はここにも書かない）。**どれもリポジトリに書かない**
 - **ログイン**：**遊ぶのは Google でログインしてから**（2026-11-23 から。タイトルだけはログインなしで見られる）。**Google のアカウントならだれでも使える**（2026-11-22 から。それまでは家族だけ）
 - **歯止め**（`functions/src/index.ts`）：家族は一人一日30回、家族以外は一人一日10回、家族以外の全員を合わせて一日200回。同じ写真の2回目からは、取っておいた設計図を返すので数えない。OpenAI の側にも、使える金額の上限を置いてある
