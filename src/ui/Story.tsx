@@ -10,7 +10,7 @@ import {
   BOSS_SLOT, CHAPTER_SIZE, CHAPTERS, chapterElements, chapterLevel, chapterOf, enemyAt, isOpen, nextSlot,
   type StoryProgress,
 } from '../game/story';
-import { atLevel, EXP_PER_WIN, levelOf } from '../game/level';
+import { atLevel, BOSS_EXP_RATE, EXP_PER_WIN, levelOf } from '../game/level';
 import { ELEMENT_INFO, strongAgainst } from '../game/data';
 import { Showcase } from './StageView';
 import { Battle } from './Battle';
@@ -304,10 +304,14 @@ function StoryResult({
     );
   const boss = slot === BOSS_SLOT;
   const hasNext = !!chapterOf(no + 1);
+  const gain = win.gain ?? EXP_PER_WIN;
+  const full = boss ? EXP_PER_WIN * BOSS_EXP_RATE : EXP_PER_WIN; // 相手のレベルが低くないときの量
   return (
     <div className="story-result">
       <div className="story-gain">
-        {name} に 経験値 +{EXP_PER_WIN}
+        {name} に 経験値 +{gain}
+        {boss && gain >= full && <small className="exp-note">（ボスなので 2倍！）</small>}
+        {gain < full && <small className="exp-note">（相手のレベルが ずっと低いので、少しだけ）</small>}
         {win.up && <b className="lvup">レベルアップ！ Lv{win.level}</b>}
       </div>
       {boss && <div className="story-clear">{no}章 クリア！</div>}

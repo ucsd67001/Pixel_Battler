@@ -3,7 +3,7 @@ import type { Character } from '../game/types';
 import { ELEMENT_INFO, FORM_INFO, SKILL_TABLE, TRAIT_TABLE, ULT_TABLE } from '../game/data';
 import { STAT_RANGE } from '../game/stats';
 import { elementTip, GLOSSARY, traitTip, type Tip } from '../game/glossary';
-import { growthOf } from '../game/level';
+import { expOf, growthOf } from '../game/level';
 import { Term } from './Term';
 
 function StatBar({ label, tip, value, range }: { label: string; tip: Tip; value: number; range: { min: number; max: number } }) {
@@ -29,7 +29,7 @@ export function CharacterCard({ c, compact }: { c: Character; compact?: boolean 
   const style = { '--el': el.color, '--eye': s.colors.eye } as CSSProperties;
   // レベルは、ガレージのロボ（写真から作ったロボ）だけに出す。コンピュータの敵・だれかのロボには出さない
   const mine = c.source === 'ai' || c.source === 'local';
-  const g = growthOf(c.exp);
+  const g = growthOf(expOf(c));
   return (
     <div className={`card${compact ? ' compact' : ''}`} style={style}>
       <div className="card-head">
@@ -69,7 +69,7 @@ export function CharacterCard({ c, compact }: { c: Character; compact?: boolean 
           <span className="growth-bar">
             <span style={{ width: `${g.need ? (g.into / g.need) * 100 : 100}%` }} />
           </span>
-          <span className="growth-next">{g.need ? `あと${g.winsLeft}勝で Lv${g.level + 1}` : 'いちばん上のレベル'}</span>
+          <span className="growth-next">{g.need ? `経験値 あと${g.left}で Lv${g.level + 1}` : 'いちばん上のレベル'}</span>
         </div>
       )}
       <div className="stats">

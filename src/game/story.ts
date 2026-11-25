@@ -64,13 +64,6 @@ export function enemyAt(no: number, slot: number): Character | undefined {
   return slot === BOSS_SLOT ? ch.boss : ch.minions[slot];
 }
 
-/**
- * 章の敵のレベル：1・4・7…（3N−2。2026-11-23、持ち主が決めた）。
- * 1章は5勝で Lv6 になるので、章N＝Lv N だと3章から先がほとんど負けなかった。
- * 3N−2 なら、1体のロボで続けて進むと7〜8章で敵と同じくらいのレベルになり、その先はレベル上げが要る
- */
-export const chapterLevel = (no: number) => 3 * no - 2;
-
 /** その章の敵の属性（出てくる順に、重ならないように） */
 export function chapterElements(no: number): Element[] {
   const out: Element[] = [];

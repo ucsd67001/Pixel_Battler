@@ -99,6 +99,7 @@ export interface Character {
   // ストーリーで育てた分（2026-11-23。src/game/level.ts）。経験値の合計と、そこから出したレベル。
   // ガレージのロボだけが持つ。書きこむのはサーバーだけ（/api/robots/win）。stats は、もとの（Lv1 の）数字のまま
   exp?: number;
+  expV?: number; // 経験値の表の版（2026-11-25 から 2。無いものは前の表。level.ts の expOf）
   level?: number;
   // ストーリーのバトルで、そのレベルの数字にしてあるロボ（atLevel で付く）。バトルの計算が、SP のたまり方とぼうぎょの効き方を合わせるのに使う
   fightLevel?: number;

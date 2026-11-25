@@ -711,6 +711,10 @@ button {
   display: grid;
   gap: 4px;
 }
+.story-gain .exp-note {
+  font-size: 12px;
+  opacity: 0.8;
+}
 .story-gain .lvup {
   font-size: 20px;
   color: var(--gold);

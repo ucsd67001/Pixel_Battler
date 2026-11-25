@@ -1,24 +1,38 @@
 // レベルと経験値（2026-11-23。docs/STORY.md の段階3）。画面とサーバーの両方が使う、純粋な計算。
-//   ・Lv1〜99。ストーリーで勝つと、勝ったロボに経験値が入る（どの敵でも同じ量）。負けても減らない
-//   ・レベルが上がるほど、次のレベルまでに要る勝利数が増える（Lv99 まで合わせて364勝）
+//   ・Lv1〜99。ストーリーで勝つと、勝ったロボに経験値が入る。負けても減らない
+//   ・経験値（2026-11-25 から。持ち主が選んだ「案F」）：手下は 10、ボスは 2倍の 20。
+//     自分より5レベル以上下の敵は半分、10レベル以上下の敵は2割（1章でのレベル上げはできるが、ゆっくり）
+//   ・レベルが上がるほど、次のレベルまでに要る経験値が増える（同じレベルの手下に、Lv1〜19 は2勝・Lv20〜39 は3勝…）
 //   ・ストーリーのバトルでは、HP・SP・こうげき・ぼうぎょが 1レベルごとに +3%（Lv99 で約3.9倍）。
 //     スキルに使う SP・毎ターンたまる SP・ダメージの式のぼうぎょの効き方も同じ割合で大きくするので、
 //     同じレベルどうしなら、Lv1 でも Lv99 でもバトルの長さは同じ
 //   ・ふたりで対戦・コンピュータと対戦は、レベルを使わない（みんな Lv1 の数字で戦う）
 
 import type { Character } from './types';
+import { BOSS_SLOT, chapterLevel } from './progress';
 
 export const MAX_LEVEL = 99;
-/** 1勝で入る経験値。いまは一定（あとで、敵や自分のレベルで変えるかもしれないので、1勝＝10 にしてある） */
+/** 同じくらいのレベルの手下に1勝したときの経験値 */
 export const EXP_PER_WIN = 10;
+/** ボスに勝ったときは、何倍か */
+export const BOSS_EXP_RATE = 2;
+
+/**
+ * 1勝でもらえる経験値（サーバーが、章・何体目か・ロボのレベルから計算する）。
+ * 自分より5レベル以上下の敵は半分、10レベル以上下の敵は2割。0 にはしない（1章でのレベル上げは許す、と持ち主が決めた）
+ */
+export function expFor(myLevel: number, foeLevel: number, boss: boolean): number {
+  const d = foeLevel - myLevel;
+  const k = d >= -4 ? 1 : d >= -9 ? 0.5 : 0.2;
+  return Math.max(1, Math.round(EXP_PER_WIN * k * (boss ? BOSS_EXP_RATE : 1)));
+}
 /** 1レベルで、数字が何割ふえるか */
 export const LEVEL_STEP = 0.03;
 
-/** そのレベルから次のレベルに上がるのに要る勝利数 */
+/** そのレベルから次のレベルに上がるのに、同じレベルの手下に何勝いるか（要る経験値は、これの10倍） */
 export function winsToNext(level: number): number {
   if (level >= MAX_LEVEL) return 0;
-  if (level < 10) return 1;
-  if (level < 20) return 2;
+  if (level < 20) return 2; // 2026-11-25 までは Lv1〜9 が1勝だった（1勝ごとにレベルが上がっていた）
   if (level < 40) return 3;
   if (level < 60) return 4;
   return 5;
@@ -40,7 +54,7 @@ export interface Growth {
   exp: number; // 経験値の合計
   into: number; // いまのレベルになってから、ためた経験値
   need: number; // 次のレベルまでに要る経験値（Lv99 は 0）
-  winsLeft: number; // 次のレベルまで、あと何勝
+  left: number; // 次のレベルまで、あといくつ
 }
 
 /** 経験値の合計から、レベルと次のレベルまでを出す */
@@ -54,18 +68,46 @@ export function growthOf(exp: number | undefined): Growth {
   }
   const need = winsToNext(level) * EXP_PER_WIN;
   const into = e - base;
-  return { level, exp: e, into, need, winsLeft: need ? Math.ceil((need - into) / EXP_PER_WIN) : 0 };
+  return { level, exp: e, into, need, left: need - into };
 }
 
-/** 1勝ぶんの経験値を足した、新しい経験値とレベル（サーバーと、手元の記録の両方が使う） */
-export function addWin(exp: number | undefined) {
+// ── 前の表で記録した経験値を、いまの表に読みかえる（2026-11-25） ──
+// 前の表（Lv1〜9 は1勝）でためた経験値は、そのまま読むとレベルが下がってしまう（負けても減らない、の決まりに反する）。
+// そこで、前の表でのレベルと、次のレベルまでの進み具合（割合）を、いまの表に移す。
+// いまの表で書いた経験値には expV（EXP_VERSION）が付く
+export const EXP_VERSION = 2;
+const oldWinsToNext = (l: number) => (l >= MAX_LEVEL ? 0 : l < 10 ? 1 : l < 20 ? 2 : l < 40 ? 3 : l < 60 ? 4 : 5);
+
+/** そのロボの経験値（いまの表で） */
+export function expOf(c: { exp?: number; expV?: number }): number {
+  const e = Math.max(0, Math.floor(Number(c.exp) || 0));
+  if (c.expV === EXP_VERSION || !e) return Math.min(MAX_EXP, e);
+  let level = 1;
+  let base = 0;
+  while (level < MAX_LEVEL && e >= base + oldWinsToNext(level) * EXP_PER_WIN) {
+    base += oldWinsToNext(level) * EXP_PER_WIN;
+    level++;
+  }
+  const oldNeed = oldWinsToNext(level) * EXP_PER_WIN;
+  const need = winsToNext(level) * EXP_PER_WIN;
+  return Math.min(MAX_EXP, expAt(level) + (oldNeed ? Math.floor(((e - base) * need) / oldNeed) : 0));
+}
+
+/** 経験値を gain だけ足した、新しい経験値とレベル（サーバーと、手元の記録の両方が使う）。exp は expOf で読んだもの */
+export function addExp(exp: number, gain: number) {
   const before = growthOf(exp);
-  const after = growthOf(Math.min(MAX_EXP, before.exp + EXP_PER_WIN));
-  return { exp: after.exp, level: after.level, before: before.level, up: after.level > before.level };
+  const after = growthOf(Math.min(MAX_EXP, before.exp + gain));
+  return { exp: after.exp, level: after.level, before: before.level, up: after.level > before.level, gain };
+}
+
+/** ストーリーの章 chapter の slot 体目に勝ったときの、新しい経験値とレベル（サーバーと、手元の記録の両方が使う） */
+export function addWin(c: { exp?: number; expV?: number }, chapter: number, slot: number) {
+  const exp = expOf(c);
+  return addExp(exp, expFor(growthOf(exp).level, chapterLevel(chapter), slot === BOSS_SLOT));
 }
 
 /** ガレージのロボのレベル（経験値から出す。経験値の無いロボは Lv1） */
-export const levelOf = (c: Character) => growthOf(c.exp).level;
+export const levelOf = (c: Character) => growthOf(expOf(c)).level;
 
 /** そのレベルの数字の倍率（Lv1 で 1、Lv99 で 3.94） */
 export const levelMult = (level: number) => 1 + LEVEL_STEP * (clampLevel(level) - 1);
@@ -104,6 +146,6 @@ export function atLevel(c: Character, level: number): Character {
 
 /** バトルの外へ出すとき（ふたりで対戦など）に、レベルの分を外す。数字はガレージのもとのまま */
 export function withoutGrowth(c: Character): Character {
-  const { exp: _exp, level: _level, fightLevel: _fight, ...rest } = c;
+  const { exp: _exp, expV: _expV, level: _level, fightLevel: _fight, ...rest } = c;
   return rest;
 }

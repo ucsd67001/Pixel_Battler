@@ -11,7 +11,7 @@ import type { Character } from './types';
 import { deleteCharacter, findBySeed, garageFullMsg, GARAGE_LIMIT, loadHangar, saveCharacter, updateCharacter } from './storage';
 import { needsTextFix, withFixedText } from './kanji';
 import { sanitizeSpec } from './spec';
-import { addWin, growthOf } from './level';
+import { addWin, EXP_VERSION, expOf, growthOf } from './level';
 import { afterWin, canWin, EMPTY_STORY, readStory, type StoryProgress } from './progress';
 import { currentUser, firestore, useUser } from '../lib/firebase';
 import { postApi } from '../lib/api';
@@ -109,6 +109,7 @@ export interface WinResult {
   exp: number;
   level: number;
   up: boolean;
+  gain?: number; // もらえた経験値（ボスは2倍・ずっと下のレベルの敵は少し）
   story: StoryProgress;
 }
 
@@ -283,15 +284,15 @@ export function useGarage(): Garage {
     if (!cur) throw new Error('not found');
     const story = loadLocalStory();
     if (!canWin(story, chapter, slot)) {
-      const g = growthOf(cur.exp);
-      return { counted: false, exp: g.exp, level: g.level, up: false, story };
+      const g = growthOf(expOf(cur));
+      return { counted: false, exp: g.exp, level: g.level, up: false, gain: 0, story };
     }
-    const w = addWin(cur.exp);
-    updateCharacter({ ...cur, exp: w.exp, level: w.level });
+    const w = addWin(cur, chapter, slot);
+    updateCharacter({ ...cur, exp: w.exp, expV: EXP_VERSION, level: w.level });
     setLocal(loadHangar());
     const next = afterWin(story, chapter, slot);
     saveLocalStory(next);
-    return { counted: true, exp: w.exp, level: w.level, up: w.up, story: next };
+    return { counted: true, exp: w.exp, level: w.level, up: w.up, gain: w.gain, story: next };
   };
 
   return {

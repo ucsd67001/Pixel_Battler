@@ -9,6 +9,14 @@ export const STORY_CHAPTERS = 10;
 export const CHAPTER_SIZE = 5;
 export const BOSS_SLOT = CHAPTER_SIZE - 1;
 
+/**
+ * 章の敵のレベル：1・4・7…（3N−2。2026-11-23、持ち主が決めた）。
+ * 1章は5勝で Lv6 になるので、章N＝Lv N だと3章から先がほとんど負けなかった。
+ * 3N−2 なら、1体のロボで続けて進むと7〜8章で敵と同じくらいのレベルになり、その先はレベル上げが要る
+ * （サーバーも、勝ったときの経験値の計算に使うので、ここに置く）
+ */
+export const chapterLevel = (no: number) => 3 * no - 2;
+
 // ── 進み具合（ログインしているときは Firestore の users/{uid} の story。書くのはサーバーだけ） ──
 export interface StoryProgress {
   cleared: number; // クリアした章のいちばん大きい番号（0＝まだ）

@@ -15,7 +15,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore, type DocumentReference } from 'firebase-admin/firestore';
 import { analyzeImage, cacheKey, refreshText, type SpecCache } from '../../server/analyze';
 import { garageLimit, makeRobot, MIN_WIN_GAP, readRobotInput, readWinInput } from '../../server/garage';
-import { addWin } from '../../src/game/level';
+import { addWin, EXP_VERSION, expOf, growthOf } from '../../src/game/level';
 import { toRival } from '../../server/rival';
 import { needsTextFix, specHardKanji, withFixedText } from '../../src/game/kanji';
 import { isHash, sanitizeSpec } from '../../src/game/spec';
@@ -215,13 +215,16 @@ export const api = onRequest(
           const last = Number(me.data()?.lastWinAt ?? 0);
           const robot = snap.data() as Character;
           const story = readStory(me.data()?.story);
-          if (now - last < MIN_WIN_GAP || !canWin(story, inp.chapter, inp.slot))
-            return { counted: false, exp: robot.exp ?? 0, level: robot.level ?? 1, up: false, story };
-          const w = addWin(robot.exp);
+          if (now - last < MIN_WIN_GAP || !canWin(story, inp.chapter, inp.slot)) {
+            const g = growthOf(expOf(robot));
+            return { counted: false, exp: g.exp, level: g.level, up: false, gain: 0, story };
+          }
+          // もらえる経験値は、章（敵のレベル）・何体目か（ボスは2倍）・ロボのレベルから、ここで決める
+          const w = addWin(robot, inp.chapter, inp.slot);
           const next = afterWin(story, inp.chapter, inp.slot);
-          tx.update(ref, { exp: w.exp, level: w.level });
+          tx.update(ref, { exp: w.exp, expV: EXP_VERSION, level: w.level });
           tx.set(userRef, { lastWinAt: now, lastWin: { chapter: inp.chapter, slot: inp.slot }, story: next }, { merge: true });
-          return { counted: true, exp: w.exp, level: w.level, up: w.up, story: next };
+          return { counted: true, exp: w.exp, level: w.level, up: w.up, gain: w.gain, story: next };
         });
         if (out === 'missing') res.status(404).json({ error: 'not found' });
         else res.json(out);

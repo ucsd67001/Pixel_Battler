@@ -3,9 +3,9 @@
 // 使い方：npm run sim
 
 import { CPU_CHARACTERS } from '../src/game/cpu';
-import { atLevel, growthOf, EXP_PER_WIN } from '../src/game/level';
+import { addExp, atLevel, expFor, growthOf } from '../src/game/level';
 import { fight, pct, pick, randomRobot } from './battle-lib';
-import { CHAPTERS, CHAPTER_SIZE, chapterLevel, enemyAt } from '../src/game/story';
+import { BOSS_SLOT, CHAPTERS, CHAPTER_SIZE, chapterLevel, enemyAt } from '../src/game/story';
 
 const N = 1500 * CPU_CHARACTERS.length;
 let wins = 0;
@@ -104,7 +104,8 @@ for (const ch of CHAPTERS) {
 console.log('  平均：' + slotSum.map(([a, b], i) => `${i + 1}体目 ${pct(a, S * CHAPTERS.length)}/${pct(b, S * CHAPTERS.length)}`).join(' ・ '));
 
 // ── 通しで遊ぶ（2026-11-23）──
-// ランダムなロボ1体で、1章から順に進む（ロボをかえない）。負けたら、その章の1体目と一度戦い（勝てば経験値。レベル上げ）、
+// ランダムなロボ1体で、1章から順に進む（ロボをかえない）。経験値はほんとうと同じ（expFor：ボスは2倍・ずっと下の敵は少し）。
+// 負けたら、その章の1体目と一度戦い（勝てば経験値。レベル上げ）、
 // それから負けた敵にもう一度ちょうせんする。
 // 章ごとに、何回戦ったか（レベル上げの分もふくむ）・始めたときの自分のレベルを出す。
 // 「戦った回数」が 5 に近いほど楽、大きいほど負けが多い。ボスで10回以上負けた人の割合も出す。
@@ -138,11 +139,12 @@ for (let i = 0; i < P; i++) {
         if (slot > 0) {
           // レベル上げ：1体目と一度戦う
           tries[k]++;
-          if (fight(atLevel(base, growthOf(exp).level), atLevel(enemyAt(ch.no, 0)!, chapterLevel(ch.no))).winner === 0) exp += EXP_PER_WIN;
+          if (fight(atLevel(base, growthOf(exp).level), atLevel(enemyAt(ch.no, 0)!, chapterLevel(ch.no))).winner === 0)
+            exp = addExp(exp, expFor(growthOf(exp).level, chapterLevel(ch.no), false)).exp;
         }
       }
       if (slot === CHAPTER_SIZE - 1 && lost >= 10) stuck[k]++;
-      if (!out) exp += EXP_PER_WIN;
+      if (!out) exp = addExp(exp, expFor(growthOf(exp).level, chapterLevel(ch.no), slot === BOSS_SLOT)).exp;
     }
     if (out) {
       gaveUp[k]++;

@@ -53,6 +53,7 @@ export function makeRobot(inp: RobotInput, cached: CharacterSpec | null): Charac
   if (inp.createdAt) c.createdAt = inp.createdAt;
   // 育てた分（経験値・レベル）は、画面から届いても受け取らない。どのロボも Lv1 から
   delete c.exp;
+  delete c.expV;
   delete c.level;
   delete c.fightLevel;
   return c;
