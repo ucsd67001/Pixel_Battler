@@ -77,7 +77,7 @@ const REASONING = /^(gpt-5|gpt-6|o1|o3|o4)/;
 /** 予備のモデル。決めたモデルで失敗したら、こちらでもう一度ためす */
 const BACKUP_MODEL = 'gpt-4.1-mini';
 /** ためす順のモデル（決めたモデル → 予備） */
-const modelsFor = (model: string) => (model === BACKUP_MODEL ? [model] : [model, BACKUP_MODEL]);
+export const modelsFor = (model: string) => (model === BACKUP_MODEL ? [model] : [model, BACKUP_MODEL]);
 
 async function callOpenAI(image: string, model: string, apiKey: string, rule: string, avoid: string[] = []): Promise<unknown> {
   const text = avoid.length
@@ -97,7 +97,7 @@ ${rule}` },
   ]);
 }
 
-async function chat(model: string, apiKey: string, name: string, schema: unknown, messages: unknown[]): Promise<unknown> {
+export async function chat(model: string, apiKey: string, name: string, schema: unknown, messages: unknown[]): Promise<unknown> {
   const body: Record<string, unknown> = {
     model,
     messages,

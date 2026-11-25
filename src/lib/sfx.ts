@@ -11,13 +11,13 @@
 
 export type SfxName =
   | 'click' | 'select' | 'scan' | 'reveal' | 'ready' | 'fight' | 'land'
-  | 'swing' | 'hit' | 'crit' | 'guard' | 'shot' | 'orb'
+  | 'swing' | 'hit' | 'crit' | 'guard' | 'shot' | 'orb' | 'magic'
   | 'skill' | 'heal' | 'buff' | 'debuff' | 'counter' | 'cutin' | 'gauge'
   | 'charge' | 'beam' | 'slash' | 'boom' | 'ko' | 'win' | 'lose'
   | 'ultboom' | 'whoosh' | 'draw';
 
 export const SFX_NAMES: SfxName[] = [
-  'click', 'select', 'scan', 'reveal', 'ready', 'fight', 'land', 'swing', 'hit', 'crit', 'guard', 'shot', 'orb',
+  'click', 'select', 'scan', 'reveal', 'ready', 'fight', 'land', 'swing', 'hit', 'crit', 'guard', 'shot', 'orb', 'magic',
   'skill', 'heal', 'buff', 'debuff', 'counter', 'cutin', 'gauge', 'charge', 'beam', 'slash', 'boom', 'ko', 'win',
   'lose', 'ultboom', 'whoosh', 'draw',
 ];
@@ -507,6 +507,11 @@ const SOUNDS: Record<SfxName, (b: Bus) => void> = {
   shot: (b) => {
     tone(b, { f: 2200, to: 260, dur: 0.16, vol: 0.12, glide: 0.12, rev: 0.2 });
     kick(b, { f: 130, to: 60, dur: 0.12, vol: 0.3 });
+  },
+  // まほう（つえ）：魔法陣が開く、キラキラした音
+  magic: (b) => {
+    sparkle(b, { base: C * 8, count: 6, spread: 0.3, vol: 0.05, rev: 0.5 });
+    tone(b, { f: 523, to: 1046, dur: 0.4, type: 'triangle', vol: 0.07, rev: 0.5 });
   },
   orb: (b) => {
     tone(b, { f: 392, to: 1046, dur: 0.35, vol: 0.12, rev: 0.4 });

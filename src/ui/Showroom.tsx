@@ -4,8 +4,12 @@
 //   ?showroom&yaw=0.5 … 向き（ラジアン）
 //   ?showroom&cpu     … コンピュータの敵を全員ならべる（&cpu=4,8 で、えらんだ敵だけ）
 //   ?showroom&minions=1 … ストーリーの1章の手下4体とボスをならべる（一度にたくさん出すと 3D の数の上限を超えるので、章ごとに見る）
+//   ?showroom&items=humanoid … その形のロボに、8種類のアイテムを一つずつ持たせてならべる（humanoid・floater・beast。&kinds=sword,axe でえらんで。2026-11-26）
+//   ?showroom&item=sword … ならべたロボ全員に、そのアイテムを持たせる（&size=large・&deco=gem も使える）
+//   ?showroom&battle=1&item=staff … アイテムを持たせて、バトルする（&foeitem=gun で、敵にも持たせる。&foe=9 で敵のロボをえらぶ）
 
 import type { CharacterSpec } from '../game/types';
+import { buildItem, ITEM_DECOS, ITEM_KINDS, ITEM_SIZES, isItemKind, withItem, type ItemKind, type ItemSpec } from '../game/items';
 import { CPU_CHARACTERS } from '../game/cpu';
 import { enemyAt } from '../game/story';
 import { StageView } from './StageView';
@@ -61,8 +65,40 @@ const SPECS: CharacterSpec[] = [
   }),
 ];
 
+const ITEM_COLORS: Record<ItemKind, ItemSpec['colors']> = {
+  sword: { primary: '#d8e2f0', secondary: '#3a3f55', accent: '#4ad8ff' },
+  axe: { primary: '#c8502e', secondary: '#5a3a22', accent: '#ffc84a' },
+  spear: { primary: '#e8e8f0', secondary: '#2a6a4a', accent: '#8aff6a' },
+  gun: { primary: '#3a4a6a', secondary: '#1a1e2a', accent: '#ff5a8a' },
+  staff: { primary: '#6a4ac9', secondary: '#e8d8a0', accent: '#c88aff' },
+  shield: { primary: '#2a6ad6', secondary: '#e8ecf4', accent: '#ffd24a' },
+  helmet: { primary: '#d6a42a', secondary: '#5a2a1a', accent: '#ff7a3a' },
+  armor: { primary: '#8a96aa', secondary: '#2a2f3d', accent: '#4affc8' },
+};
+const itemOf = (kind: ItemKind, q: URLSearchParams): ItemSpec => {
+  const size = q.get('size');
+  const deco = q.get('deco');
+  return {
+    kind,
+    name: kind,
+    description: '',
+    motif: '',
+    colors: ITEM_COLORS[kind],
+    size: (ITEM_SIZES as readonly string[]).includes(size ?? '') ? (size as ItemSpec['size']) : 'medium',
+    deco: (ITEM_DECOS as readonly string[]).includes(deco ?? '') ? (deco as ItemSpec['deco']) : 'plain',
+  };
+};
+
 export function Showroom() {
   const q = new URLSearchParams(location.search);
+  const itemsForm = q.get('items');
+  // アイテムが見やすいように、暗めの色のロボにする
+  const dark = { primary: '#3a3550', secondary: '#7a6bb6', accent: '#c9a24a', eye: '#ff4ad6' };
+  const formBase =
+    { humanoid: SPECS[5], floater: { ...SPECS[8], colors: dark }, beast: { ...SPECS[9], colors: dark } }[itemsForm ?? ''] ?? SPECS[5];
+  // &kinds=helmet,armor … えらんだ種類だけ
+  const kinds = q.get('kinds') ? ITEM_KINDS.filter((k) => q.get('kinds')!.split(',').includes(k)) : [...ITEM_KINDS];
+  const oneItem = q.get('item');
   const pose = (q.get('pose') ?? 'idle') as PoseName;
   const yaw = Number(q.get('yaw') ?? '0.5');
   const only = q.get('only');
@@ -71,7 +107,9 @@ export function Showroom() {
   // ?showroom&cpu … コンピュータの敵を全員ならべる（&cpu=4,8 でえらんで）
   const cpuSel = q.get('cpu');
   const minionCh = Number(q.get('minions')) || 1;
-  const list = q.has('minions')
+  const list = itemsForm
+    ? kinds.map(() => formBase)
+    : q.has('minions')
     ? [0, 1, 2, 3, 4].map((slot) => enemyAt(minionCh, slot)).filter((c) => !!c).map((c) => c.spec)
     : q.has('cpu')
     ? (cpuSel ? cpuSel.split(',').map((i) => CPU_CHARACTERS[Number(i)]).filter(Boolean) : CPU_CHARACTERS).map((c) => c.spec)
@@ -84,7 +122,20 @@ export function Showroom() {
   if (q.has('battle')) {
     const spec = SPECS[Number(q.get('battle'))] ?? SPECS[0];
     const back = () => location.reload();
-    return <Battle player={{ ...CPU_CHARACTERS[0], id: 'showroom', source: 'local', spec }} onExit={back} onRematch={back} />;
+    const foeItem = q.get('foeitem');
+    const player = withItem(
+      { ...CPU_CHARACTERS[0], id: 'showroom', source: 'local', spec },
+      isItemKind(oneItem) ? buildItem(itemOf(oneItem, q), 'showroom-item', 'local') : undefined,
+    );
+    const foeSpec = q.has('foe') ? SPECS[Number(q.get('foe'))] : undefined;
+    const enemy =
+      foeSpec || isItemKind(foeItem)
+        ? withItem(
+            { ...CPU_CHARACTERS[1], id: 'showroom-foe', ...(foeSpec ? { spec: foeSpec } : {}) },
+            isItemKind(foeItem) ? buildItem(itemOf(foeItem, q), 'showroom-foe-item', 'local') : undefined,
+          )
+        : undefined;
+    return <Battle player={player} enemy={enemy} onExit={back} onRematch={back} />;
   }
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, list.length)}, 1fr)`, gap: 4, padding: 4, background: '#0b0d14', minHeight: '100vh' }}>
@@ -99,7 +150,7 @@ export function Showroom() {
             mode="showcase"
             className="stage"
             onReady={(s) => {
-              s.setShowcase(spec);
+              s.setShowcase(spec, itemsForm ? itemOf(kinds[i], q) : isItemKind(oneItem) ? itemOf(oneItem, q) : undefined);
               s.turntable = q.has('spin');
               const r = (s as unknown as { robots: ({ root: { rotation: { y: number } } } | null)[] }).robots[0];
               if (r) {

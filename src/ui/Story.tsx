@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Character, Element } from '../game/types';
 import { useGarage, useStory, type WinResult } from '../game/garage';
+import { useItemBox } from '../game/itemBox';
 import {
   BOSS_SLOT, CHAPTER_SIZE, CHAPTERS, chapterElements, chapterLevel, chapterOf, enemyAt, isOpen, nextSlot, reachOf,
   type StoryProgress,
@@ -185,19 +186,21 @@ export function StoryBattle({
   onMap: () => void;
 }) {
   const garage = useGarage();
+  const box = useItemBox();
   const base = garage.find(seed);
   // 戦う姿は、始まったときに一度だけ決める（勝って経験値が入っても、このバトルの数字は変えない）
   const [fight, setFight] = useState<{ player: Character; enemy: Character; intro?: string } | null>(null);
   useEffect(() => {
-    if (fight || !base) return;
+    if (fight || !base || !box.ready) return;
     const enemy = atLevel(enemyAt(no, slot)!, chapterLevel(no));
     const line = chapterOf(no)!.lines[slot];
     const intro = line ? `${enemy.spec.name}「${line}」` : undefined;
-    setFight({ player: atLevel(base, levelOf(base)), enemy, intro });
-  }, [base, fight, no, slot]);
+    // 持たせているアイテムも、ここで持たせる（レベルとアイテムは、どちらを先にかけても同じ）
+    setFight({ player: box.arm(atLevel(base, levelOf(base))), enemy, intro });
+  }, [base, box, fight, no, slot]);
 
   // ガレージを読み終えるまでと、戦う姿を決めるまでは「読みこんでいます」（「見つかりません」が一瞬出ないように）
-  if (!garage.ready || (base && !fight)) return <div className="screen"><div className="empty">読みこんでいます…</div></div>;
+  if (!garage.ready || !box.ready || (base && !fight)) return <div className="screen"><div className="empty">読みこんでいます…</div></div>;
   if (!base || !fight)
     return (
       <div className="screen">

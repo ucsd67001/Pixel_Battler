@@ -8,6 +8,7 @@ import { Ranking } from './ui/Ranking';
 import { NavMenu, type NavTarget } from './ui/NavMenu';
 import { Create } from './ui/Create';
 import { Hangar } from './ui/Hangar';
+import { Items } from './ui/Items';
 import { prefetchRival } from './game/rival';
 import { Battle } from './ui/Battle';
 import { Room } from './ui/Room';
@@ -16,7 +17,7 @@ import { BOSS_SLOT, chapterLevel, enemyAt } from './game/story';
 import { advantageText, ELEMENT_INFO } from './game/data';
 import type { NetBattle, RoomSession } from './net/room';
 
-const NAV_SCREENS: NavTarget[] = ['title', 'pick', 'story', 'room', 'create', 'hangar', 'mypage', 'ranking', 'about'];
+const NAV_SCREENS: NavTarget[] = ['title', 'pick', 'story', 'room', 'create', 'hangar', 'items', 'mypage', 'ranking', 'about'];
 
 // ロボの見本の画面は開発中だけ。本番のファイルには入れない
 const Showroom = lazy(() => import('./ui/Showroom').then((m) => ({ default: m.Showroom })));
@@ -26,8 +27,9 @@ type Screen =
   | { name: 'about' } // ピクセル・バトラーって？（#about でも開く）
   | { name: 'mypage' } // マイページ（戦績・ロボ）
   | { name: 'ranking' } // ランキング（プレイヤーとロボ）
-  | { name: 'create' }
+  | { name: 'create'; make?: 'item' } // make：はじめから「アイテム」を選んでおく（アイテムの置き場から来たとき）
   | { name: 'hangar' }
+  | { name: 'items' } // アイテムの置き場（2026-11-25）
   | { name: 'pick' } // コンピュータと対戦：戦うロボを選ぶ
   | { name: 'battle'; char: Character; key: number }
   | { name: 'room' }
@@ -142,6 +144,7 @@ export function App() {
           onRanking={() => setScreen({ name: 'ranking' })}
           onCreate={() => setScreen({ name: 'create' })}
           onHangar={() => setScreen({ name: 'hangar' })}
+          onItems={() => setScreen({ name: 'items' })}
           onPick={startPick}
           onRoom={() => setScreen({ name: 'room' })}
           onStory={() => setScreen({ name: 'story' })}
@@ -154,9 +157,11 @@ export function App() {
     case 'ranking':
       return <Ranking onBack={title} onMyPage={() => setScreen({ name: 'mypage' })} />;
     case 'create':
-      return <Create onFight={fight} onBack={title} />;
+      return <Create onFight={fight} onBack={title} initialMake={screen.make} />;
     case 'hangar':
       return <Hangar onFight={fight} onBack={title} />;
+    case 'items':
+      return <Items onBack={title} onCreate={() => setScreen({ name: 'create', make: 'item' })} />;
     case 'pick':
       return <Hangar pick onFight={fight} onBack={title} />;
     case 'battle':

@@ -7,12 +7,14 @@
 //   ・本番は Firestore の rooms/main（バトル）と rooms/main/players/{uid}（いる人。一人一枚）。
 //     Google でログインした人ならだれでも使える。ほかの人の分は書きかえられない（firestore.rules）
 //   ・知らない人とも会うので、出すのはロボの名前だけ（Google の名前は出さない）。写真（thumb）は部屋に送らない
+//   ・持たせているアイテムも送る（設計図と写真の印だけ。アイテムの写真と、写っていたもの（motif）は送らない。2026-11-26）
 //   ・手元で試すときは、URL に ?localroom を付けると、同じブラウザの二つのタブで話す（開発中だけ）
 
 import type { ActionType } from '../game/battle';
 import { withoutGrowth } from '../game/level';
 import { sanitizeSpec } from '../game/spec';
 import { buildCharacter } from '../game/stats';
+import { buildItem, gearOf, sanitizeItemSpec, withItem, type Item } from '../game/items';
 import type { Character } from '../game/types';
 import { currentUser, firestore } from '../lib/firebase';
 import {
@@ -69,8 +71,11 @@ function normalize(raw: RawRoom, now = Date.now()): RoomState {
 // 部屋に送るロボ：写真（thumb）を外す（知らない人に、家族の写真を見せないため）
 export function publicChar(c: Character): Character {
   // ふたりで対戦は、レベルを使わない（どちらも Lv1 の数字で戦う。2026-11-23）
-  const { thumb: _thumb, ...rest } = withoutGrowth(c);
-  return rest;
+  const { thumb: _thumb, item, ...rest } = withoutGrowth(c);
+  if (!item) return rest;
+  // アイテムは、強さを決める写真の印と設計図だけ。写真と、写っていたもの（motif）は外す
+  const { thumb: _it, ...it } = item;
+  return { ...rest, item: { ...it, spec: { ...it.spec, motif: '' } } };
 }
 
 /**
@@ -82,8 +87,20 @@ export function publicChar(c: Character): Character {
 export function fairChar(raw: Character): Character {
   const seed = String(raw?.seed ?? '').slice(0, 80) || 'room';
   const c = buildCharacter(sanitizeSpec(raw?.spec), seed, raw?.source === 'local' ? 'local' : 'ai');
-  return { ...c, id: String(raw?.id ?? seed).slice(0, 80), createdAt: 0 };
+  return withItem({ ...c, id: String(raw?.id ?? seed).slice(0, 80), createdAt: 0 }, fairItem(raw?.item));
 }
+
+/** 部屋に書かれたアイテムも、設計図を整え、強さ（総合力・ランク）は写真の印から出し直す。特別な写真のしるしは受け取らない */
+function fairItem(raw: Item | undefined): Item | undefined {
+  if (!raw || typeof raw !== 'object' || !raw.spec) return undefined;
+  const seed = String(raw.seed ?? '').slice(0, 80);
+  if (!seed) return undefined;
+  const it = buildItem({ ...sanitizeItemSpec(raw.spec), motif: '', bonus: 0 }, seed, raw.source === 'local' ? 'local' : 'ai');
+  return { ...it, id: `item-${seed.slice(0, 12)}`, createdAt: 0 };
+}
+
+/** 先に動けるか（「先手」の特性か、じゅうを持っている） */
+const goesFirst = (c: Character) => c.spec.trait === 'first' || gearOf(fairChar(c)).first;
 
 function joinRoom(raw: RawRoom, me: string, full: Character): RawRoom | 'full' {
   const char = publicChar(full);
@@ -107,9 +124,9 @@ function startIn(raw: RawRoom, me: string): RawRoom | null | 'already' {
   if (raw.battle && raw.battle.p.includes(me) && Date.now() - raw.battle.at < 10_000) return 'already';
   const [a, b] = st.players;
   const seed = Math.floor(Math.random() * 2 ** 32);
-  // 先に動く人：「先手」の特性を持つほう。どちらも同じなら、さいころで決める
-  const fa = a.char.spec.trait === 'first';
-  const fb = b.char.spec.trait === 'first';
+  // 先に動く人：「先手」の特性か、じゅうを持つほう。どちらも同じなら、さいころで決める
+  const fa = goesFirst(a.char);
+  const fb = goesFirst(b.char);
   const first = fa && !fb ? a.uid : fb && !fa ? b.uid : seed % 2 ? a.uid : b.uid;
   const battle: RoomBattle = {
     id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,

@@ -37,6 +37,10 @@ service cloud.firestore {
     match /users/{uid}/robots/{robot} {
       allow read, delete: if signedIn() && uid == request.auth.uid;
     }
+    // アイテムの置き場（写真から作った武器と防具。2026-11-25 から）：見る・消すのは本人だけ。入れるのはサーバーだけ（/api/items）
+    match /users/{uid}/items/{item} {
+      allow read, delete: if signedIn() && uid == request.auth.uid;
+    }
     match /{document=**} {
       allow read, write: if false;
     }

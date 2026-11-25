@@ -3,8 +3,10 @@ import react from '@vitejs/plugin-react';
 import fs from 'node:fs';
 import path from 'node:path';
 import { analyzeImage, refreshText, type SpecCache } from './server/analyze';
+import { analyzeItem, readItemInput, type ItemCache } from './server/items';
+import { buildItem, localItemSpec, type Item, type ItemSpec } from './src/game/items';
 import { sanitizeSpec } from './src/game/spec';
-import { toRival } from './server/rival';
+import { toRival, toRivalItem } from './server/rival';
 import { buildRanking, type RawPlayer, type RawRobot } from './src/game/ranking';
 import { createHash } from 'node:crypto';
 
@@ -55,6 +57,19 @@ function apiPlugin(env: Record<string, string>): Plugin {
     },
   };
 
+  // アイテムの設計図は、別の場所に取っておく（.cache/specs はロボだけ。rival と ranking が、ロボの設計図として読むため）
+  const itemDir = path.resolve(process.cwd(), '.cache/items');
+  const itemCache: ItemCache = {
+    async get(key) {
+      const f = path.join(itemDir, `${key}.json`);
+      return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null;
+    },
+    async set(key, spec) {
+      fs.mkdirSync(itemDir, { recursive: true });
+      fs.writeFileSync(path.join(itemDir, `${key}.json`), JSON.stringify(spec, null, 2), 'utf8');
+    },
+  };
+
   const send = (res: any, status: number, data: unknown) => {
     res.statusCode = status;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -81,6 +96,30 @@ function apiPlugin(env: Record<string, string>): Plugin {
     }
   };
 
+  // 写真からアイテムを作る（手元では、作ったアイテムを返すだけ。入れるのは画面＝このスマホの中。本番はサーバーが置き場に入れる）
+  const items: Connect.NextHandleFunction = async (req, res) => {
+    if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
+    try {
+      const inp = readItemInput(JSON.parse(await readBody(req, 6 * 1024 * 1024)));
+      if (!inp) return send(res, 400, { error: 'bad item' });
+      let spec: ItemSpec;
+      let source: Item['source'] = 'ai';
+      try {
+        if (!apiKey) throw new Error('no api key');
+        spec = (await analyzeItem(inp.image, inp.hash, { apiKey, model, cache: itemCache })).spec;
+      } catch (e) {
+        console.warn(`[item] 写真の色から：${String((e as Error).message).slice(0, 200)}`);
+        spec = localItemSpec(inp.hash, inp.colors);
+        source = 'local';
+      }
+      const item = buildItem(spec, inp.hash, source, inp.thumb);
+      console.log(`[item] ${spec.motif} → ${spec.name}（${spec.kind}・${item.rank}・${source}）`);
+      send(res, 200, { item });
+    } catch (e) {
+      send(res, 500, { error: String((e as Error).message).slice(0, 200) });
+    }
+  };
+
   // 手元のガレージ（このスマホの中）のロボの文から、習わない漢字を取りのぞく。設計図を受け取り、直した設計図を返す
   const fixText: Connect.NextHandleFunction = async (req, res) => {
     if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
@@ -102,7 +141,16 @@ function apiPlugin(env: Record<string, string>): Plugin {
     const f = files[Math.floor(Math.random() * files.length)];
     const spec = JSON.parse(fs.readFileSync(path.join(cacheDir, f), 'utf8'));
     const seed = createHash('sha256').update(f).digest('hex');
-    send(res, 200, { robot: toRival({ seed, spec }) });
+    const robot = toRival({ seed, spec });
+    // 半分は、取り置きのアイテムを一つ持たせる（本番は、持ち主が持たせているアイテム）
+    const items = fs.existsSync(itemDir) ? fs.readdirSync(itemDir).filter((x) => x.endsWith('.json')) : [];
+    if (robot && items.length && Math.random() < 0.5) {
+      const x = items[Math.floor(Math.random() * items.length)];
+      const ispec = JSON.parse(fs.readFileSync(path.join(itemDir, x), 'utf8')) as ItemSpec;
+      const item = toRivalItem(buildItem(ispec, createHash('sha256').update(x).digest('hex'), 'ai'));
+      if (item) robot.item = item;
+    }
+    send(res, 200, { robot });
   };
 
   // ランキングの画面を手元で試すため：取り置きの設計図から、見本のランキングを作って返す（数はでたらめ。本番は /api/ranking）
@@ -144,6 +192,7 @@ function apiPlugin(env: Record<string, string>): Plugin {
   const mount = (m: Connect.Server) => {
     m.use('/api/health', health);
     m.use('/api/analyze', analyze);
+    m.use('/api/items', items);
     m.use('/api/fix-text', fixText);
     m.use('/api/rival', rival);
     m.use('/api/ranking', ranking);

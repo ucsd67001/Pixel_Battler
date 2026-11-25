@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import { useUser } from '../lib/firebase';
 
-export type NavTarget = 'title' | 'pick' | 'story' | 'room' | 'create' | 'hangar' | 'mypage' | 'ranking' | 'about';
+export type NavTarget = 'title' | 'pick' | 'story' | 'room' | 'create' | 'hangar' | 'items' | 'mypage' | 'ranking' | 'about';
 
 const GROUPS: { label: string; items: { to: NavTarget; label: string; login?: boolean }[] }[] = [
   {
@@ -19,10 +19,11 @@ const GROUPS: { label: string; items: { to: NavTarget; label: string; login?: bo
     ],
   },
   {
-    label: 'ロボ',
+    label: 'ロボとアイテム',
     items: [
       { to: 'create', label: '写真から作る', login: true },
       { to: 'hangar', label: 'ガレージ', login: true },
+      { to: 'items', label: 'アイテムの置き場', login: true },
     ],
   },
   {

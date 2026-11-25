@@ -5,7 +5,8 @@
 
 import { CPU_CHARACTERS, pickCpu } from '../src/game/cpu';
 import { addExp, atLevel, expFor, growthOf } from '../src/game/level';
-import { fight, pct, pick, randomRobot } from './battle-lib';
+import { fight, pct, pick, randomItem, randomRobot } from './battle-lib';
+import { ITEM_KINDS, withItem } from '../src/game/items';
 import { BOSS_SLOT, CHAPTERS, CHAPTER_SIZE, chapterLevel, enemyAt } from '../src/game/story';
 
 const N = 1500 * CPU_CHARACTERS.length;
@@ -162,3 +163,40 @@ for (const ch of CHAPTERS) {
       `ボスで10回以上負け ${pct(stuck[k], n)}  ここで止まった ${pct(gaveUp[k], P)}`,
   );
 }
+
+// ── アイテム（2026-11-25。src/game/items.ts・docs/ITEMS.md）──
+// ランダムなロボにその種類のアイテムを持たせ、持っていないランダムなロボと戦わせる（先と後を半分ずつ入れかえる。Lv1・10・25 をまぜる）。
+// どの種類も約60%（レベルが2〜3上と同じくらい）にそろっているのがよい（武器と防具のどれを選んでも損をしない）。
+// あわせて、アイテムを持ったロボが、コンピュータの敵（アイテムなし）に勝つ割合も出す
+const I = 3000;
+console.log('アイテム（持つ 対 持たない。約60%でそろうのがよい）：');
+const itemRow: string[] = [];
+let cpuW = 0;
+for (const kind of ITEM_KINDS) {
+  let w = 0;
+  for (let i = 0; i < I; i++) {
+    const lv = [1, 10, 25][i % 3];
+    const a = atLevel(withItem(randomRobot(`ia${i}`), randomItem(kind, `it${kind}${i}`)), lv);
+    const b = atLevel(randomRobot(`ib${i}`), lv);
+    const swap = i % 2 === 1;
+    const st = swap ? fight(b, a) : fight(a, b);
+    if (st.winner === (swap ? 1 : 0)) w++;
+    if (i % 3 === 0 && fight(withItem(randomRobot(`ic${i}`), randomItem(kind, `id${kind}${i}`)), pickCpu()).winner === 0) cpuW++;
+  }
+  itemRow.push(`${kind} ${pct(w, I)}`);
+}
+console.log('  ' + itemRow.join(' / '));
+console.log(`  アイテムを持ったロボ 対 コンピュータの敵：勝率 ${pct(cpuW, (I / 3) * ITEM_KINDS.length)}（持たないときは約50%）`);
+
+// ストーリーのボス（同じレベル）に、アイテムを持って挑む（2026-11-26。段階5で、ストーリーでも効くようにした）。
+// 持たないときは約50%（上の「ストーリー」の5体目）。アイテムの分だけ、ストーリーが少しやさしくなる
+let bossW = 0;
+const BI = 200;
+for (const ch of CHAPTERS) {
+  for (let i = 0; i < BI; i++) {
+    const kind = ITEM_KINDS[i % ITEM_KINDS.length];
+    const c = atLevel(withItem(randomRobot(`bi${ch.no}-${i}`), randomItem(kind, `bt${ch.no}-${i}`)), chapterLevel(ch.no));
+    if (fight(c, atLevel(enemyAt(ch.no, BOSS_SLOT)!, chapterLevel(ch.no))).winner === 0) bossW++;
+  }
+}
+console.log(`  ストーリーのボス（同じレベル）に、アイテムを持って挑む：勝率 ${pct(bossW, BI * CHAPTERS.length)}（持たないときは約50%）`);

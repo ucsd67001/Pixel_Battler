@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useGarage } from '../game/garage';
+import { useItemBox } from '../game/itemBox';
 import { CPU_CHARACTER } from '../game/cpu';
 import { checkHealth, type Health } from '../lib/api';
 import { Showcase } from './StageView';
@@ -40,6 +41,7 @@ export function Title({
   onRanking,
   onCreate,
   onHangar,
+  onItems,
   onPick,
   onRoom,
   onStory,
@@ -49,6 +51,7 @@ export function Title({
   onRanking: () => void; // ランキング（ログインしてから）
   onCreate: () => void;
   onHangar: () => void;
+  onItems: () => void; // アイテムの置き場（2026-11-25）
   onPick: () => void; // コンピュータと対戦（戦うロボを選ぶ画面へ）
   onRoom: () => void;
   onStory: () => void; // ストーリー（章の一覧へ）
@@ -57,6 +60,7 @@ export function Title({
   const peek = useRoomPeek();
   const waiting = peek?.players.length === 1;
   const hangar = useGarage().list;
+  const items = useItemBox().list;
   const [ai, setAi] = useState<Health | null>(null);
   useEffect(() => {
     checkHealth().then(setAi);
@@ -138,10 +142,19 @@ export function Title({
           <button className={`btn big${latest ? '' : ' primary'}`} onClick={onCreate}>
             写真から作る
           </button>
-          {hangar.length > 0 && (
-            <button className="btn ghost" onClick={onHangar}>
-              ガレージ（{hangar.length}体）
-            </button>
+          {(hangar.length > 0 || items.length > 0) && (
+            <div className="menu-pair">
+              {hangar.length > 0 && (
+                <button className="btn ghost" onClick={onHangar}>
+                  ガレージ（{hangar.length}体）
+                </button>
+              )}
+              {items.length > 0 && (
+                <button className="btn ghost" onClick={onItems}>
+                  アイテム（{items.length}個）
+                </button>
+              )}
+            </div>
           )}
           {sub}
           {user && (

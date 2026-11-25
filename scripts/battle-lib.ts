@@ -5,6 +5,7 @@ import { buildCharacter } from '../src/game/stats';
 import { chooseAction } from '../src/game/cpu';
 import { act, createBattle, endTurn, startTurn, type ActionType, type BattleState } from '../src/game/battle';
 import { ELEMENTS, TRAITS, type Character } from '../src/game/types';
+import { buildItem, type Item, type ItemKind } from '../src/game/items';
 
 /** list から一つ、乱数で選ぶ */
 export const pick = <T,>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)];
@@ -34,4 +35,10 @@ export function fight(a: Character, b: Character, onAction?: (type: ActionType, 
     endTurn(st);
   }
   return st;
+}
+
+/** ランダムな強さ（総合力）の、その種類のアイテム（2026-11-25。docs/ITEMS.md） */
+export function randomItem(kind: ItemKind, seed: string): Item {
+  const colors = { primary: '#888888', secondary: '#444444', accent: '#ffcc00' };
+  return buildItem({ kind, name: kind, description: '', motif: '', colors, size: 'medium', deco: 'plain' }, seed, 'local');
 }

@@ -5,6 +5,8 @@ import { ELEMENT_INFO } from '../game/data';
 import { levelOf } from '../game/level';
 import { CharacterCard } from './CharacterCard';
 import { Showcase } from './StageView';
+import { useItemBox } from '../game/itemBox';
+import { ItemSlot } from './ItemSlot';
 
 // ガレージの画面。pick のときは「コンピュータと対戦」の、戦うロボを選ぶ画面として使う（消すボタンは出さない）
 export function Hangar({
@@ -23,6 +25,7 @@ export function Hangar({
   backLabel?: string;
 }) {
   const garage = useGarage();
+  const box = useItemBox();
   if (import.meta.env.DEV) (window as any).__garage = garage; // 試すときに経験値を足すため（開発中だけ）
   const list = garage.list;
   const [selSeed, setSelSeed] = useState<string | null>(null);
@@ -80,7 +83,7 @@ export function Hangar({
       ) : (
         <div className="split">
           <div className="split-stage">
-            {sel && <Showcase spec={sel.spec} className="stage" />}
+            {sel && <Showcase spec={sel.spec} item={sel.itemSeed ? box.find(sel.itemSeed)?.spec : undefined} className="stage" />}
             <div className="roster">
               {list.map((c) => (
                 <button
@@ -102,8 +105,9 @@ export function Hangar({
           {sel && (
             <div className="split-info">
               <CharacterCard c={sel} />
+              <ItemSlot c={sel} garage={garage} box={box} />
               <div className="actions">
-                <button className="btn primary big" onClick={() => onFight(sel)}>
+                <button className="btn primary big" onClick={() => onFight(box.arm(sel))}>
                   {pick ? `${sel.spec.name} で戦う！` : 'バトルへ！'}
                 </button>
                 {!pick && (

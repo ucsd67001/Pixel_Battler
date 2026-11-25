@@ -27,8 +27,9 @@ export class GarageFullError extends Error {
 }
 
 // クラウドのガレージに何体まで入るか（家族は100体、ほかは30体）。サーバーに一度だけ聞く
+// アイテムの置き場の上限も、同じ数（src/game/itemBox.ts）
 const limits = new Map<string, Promise<number>>();
-function cloudLimit(uid: string): Promise<number> {
+export function cloudLimit(uid: string): Promise<number> {
   let p = limits.get(uid);
   if (!p) {
     p = (async () => {
@@ -298,6 +299,8 @@ export interface Garage {
   find(seed: string): Character | undefined;
   add(c: Character): Promise<Character>;
   remove(c: Character): Promise<void>;
+  // アイテムを持たせる・外す（2026-11-26。item＝アイテムの写真の印、null で外す。クラウドではサーバーが書く）
+  equip(c: Character, item: string | null): Promise<void>;
   // ストーリーで勝ったロボに、経験値を足す（2026-11-23。クラウドではサーバーが書く。chapter＝何章・slot＝何体目（0〜4））
   win(c: Character, chapter: number, slot: number): Promise<WinResult>;
 }
@@ -397,6 +400,21 @@ export function useGarage(): Garage {
     setLocal(loadHangar());
   };
 
+  const equip = async (c: Character, item: string | null) => {
+    if (isCloud) {
+      const r = await postApi('/api/robots/equip', { hash: c.seed, item }, { needLogin: true });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return; // 一覧は onSnapshot で新しくなる
+    }
+    const cur = findBySeed(c.seed);
+    if (!cur) throw new Error('not found');
+    const next = { ...cur };
+    if (item) next.itemSeed = item;
+    else delete next.itemSeed;
+    updateCharacter(next);
+    setLocal(loadHangar());
+  };
+
   const win = async (c: Character, chapter: number, slot: number): Promise<WinResult> => {
     // 本番では、いつもサーバーに送る（この画面のログインの状態を読み終える前でも。2026-11-23、
     // 勝った直後にまだ読み終えていなくて、このスマホの中に記録しようとして失敗していた）
@@ -427,6 +445,7 @@ export function useGarage(): Garage {
     find: (seed) => list.find((c) => c.seed === seed),
     add,
     remove,
+    equip,
     win,
   };
 }

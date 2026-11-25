@@ -2,6 +2,7 @@ import type { CharacterSpec } from '../game/types';
 import { sanitizeSpec } from '../game/spec';
 import { idToken } from './firebase';
 import { garageFullMsg } from '../game/storage';
+import type { Item } from '../game/items';
 
 // auth＝写真から作るのにログインが要るか（Firebase の上では true、手元では false）
 export interface Health {
@@ -57,22 +58,54 @@ export class AccessError extends Error {
   }
 }
 
+/** ログインや回数の上限で、写真から作れなかったときの文（ロボとアイテムで同じ） */
+function accessError(status: number, data: any, fullMsg: string): AccessError | null {
+  if (status === 401) return new AccessError(401, 'Google でログインしてください。');
+  if (status === 403) return new AccessError(403, 'このアカウントでは、写真から作れません（メールアドレスの確認が済んだ Google アカウントが要ります）。');
+  if (status === 409) return new AccessError(409, fullMsg);
+  if (status === 429)
+    return new AccessError(
+      429,
+      data?.error === 'everyone limit'
+        ? '今日は、みんなの分の回数がいっぱいになりました。また明日どうぞ。'
+        : `今日の分（一日${data?.limit ?? ''}回。ロボとアイテムを合わせて）を使い切りました。また明日どうぞ。`,
+    );
+  return null;
+}
+
+export const itemsFullMsg = (limit: number) => `アイテムの置き場が いっぱいです（${limit}個まで）。`;
+
+/**
+ * 写真からアイテムを作ってもらう（2026-11-25。/api/items）。本番では、サーバーがアイテムの置き場にも入れる。
+ * again＝同じ写真のアイテムが、もう置き場にあった
+ */
+export async function makeItem(img: { dataUrl: string; hash: string; thumb: string; colors: string[] }, needLogin: boolean): Promise<{ item: Item; again: boolean }> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 90000);
+  try {
+    const r = await postApi(
+      '/api/items',
+      { image: img.dataUrl, hash: img.hash, thumb: img.thumb, colors: img.colors },
+      { signal: ctrl.signal, needLogin },
+    );
+    const data = await r.json().catch(() => ({}));
+    const err = accessError(r.status, data, itemsFullMsg(Number(data?.limit) || 30));
+    if (err) throw err;
+    if (!r.ok || !data?.item) throw new Error(data?.error || `HTTP ${r.status}`);
+    return { item: data.item as Item, again: !!data.again };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function analyze(image: string, hash: string): Promise<{ spec: CharacterSpec; model: string }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 90000);
   try {
     const r = await postApi('/api/analyze', { image, hash }, { signal: ctrl.signal });
     const data = await r.json().catch(() => ({}));
-    if (r.status === 401) throw new AccessError(401, 'Google でログインしてください。');
-    if (r.status === 403) throw new AccessError(403, 'このアカウントでは、写真から作れません（メールアドレスの確認が済んだ Google アカウントが要ります）。');
-    if (r.status === 409) throw new AccessError(409, garageFullMsg(Number(data?.limit) || undefined));
-    if (r.status === 429)
-      throw new AccessError(
-        429,
-        data?.error === 'everyone limit'
-          ? '今日は、みんなの分の回数がいっぱいになりました。また明日どうぞ。'
-          : `今日の分（一日${data?.limit ?? ''}回）を使い切りました。また明日どうぞ。`,
-      );
+    const err = accessError(r.status, data, garageFullMsg(Number(data?.limit) || undefined));
+    if (err) throw err;
     if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
     return { spec: sanitizeSpec(data.spec), model: data.model };
   } finally {

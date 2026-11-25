@@ -58,6 +58,22 @@ export function makeRobot(inp: RobotInput, cached: CharacterSpec | null): Charac
   return c;
 }
 
+// ── アイテムを持たせる・外す（2026-11-26。docs/ITEMS.md の段階4） ──
+export interface EquipInput {
+  hash: string; // ロボの写真の印
+  item: string | null; // 持たせるアイテムの写真の印（null で外す）
+}
+
+/** 持たせる知らせの中身を確かめる。おかしければ null */
+export function readEquipInput(body: any): EquipInput | null {
+  const b = body ?? {};
+  const hash = String(b.hash ?? '');
+  if (!isHash(hash)) return null;
+  if (b.item === null || b.item === undefined || b.item === '') return { hash, item: null };
+  const item = String(b.item);
+  return isHash(item) ? { hash, item } : null;
+}
+
 // ── ストーリーで勝ったときの経験値（2026-11-23。docs/STORY.md の段階3）──
 // ずるの歯止め：一人につき、前の勝ちから MIN_BATTLE_MS（20秒。src/game/record.ts）より短い知らせは数えない
 

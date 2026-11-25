@@ -9,7 +9,8 @@ import type { CharacterSpec, Form, HeadType } from '../game/types';
 import { ELEMENT_INFO } from '../game/data';
 import { mulberry32 } from '../game/random';
 import { lookSeed } from '../game/spec';
-import { wornParts } from '../game/items';
+import { ITEM_TABLE, wornParts, type ItemKind, type ItemSpec } from '../game/items';
+import { attachItem, type ItemMounts } from './itemModel';
 import { Ease, lerp, type EaseFn, type Tweener } from './anim';
 
 export type Pose = Record<string, [number, number, number]>;
@@ -23,6 +24,7 @@ export interface Robot {
   root: THREE.Group; // 場所と向き
   body: THREE.Group; // 揺れ・倒れ
   bones: Record<string, THREE.Group>;
+  weapon: ItemKind | null; // 持っている武器（アイテム）。攻撃の動きを変える。防具や素手なら null
   tip: THREE.Object3D; // 武器の先
   muzzle: THREE.Object3D; // 撃つところ
   core: THREE.Object3D; // 胸のコア
@@ -150,7 +152,7 @@ export function proportionsOf(spec: CharacterSpec) {
     waist: span(0.78, 1.2), // 腰の細さ
   };
 }
-type Kit = ReturnType<typeof makeKit>;
+export type Kit = ReturnType<typeof makeKit>;
 
 // ── 頭の飾り（どの体の形でも使う）。top＝頭のてっぺん、front＝顔の前の面、sc＝大きさ ──
 function addOrnament(k: Kit, parent: THREE.Object3D, type: HeadType, top: number, front: number, sc = 1) {
@@ -613,6 +615,7 @@ function buildHumanoid(k: Kit, body: THREE.Group) {
       legL: LL.leg, legR: LR.leg, shinL: LL.shin, shinR: LR.shin,
     },
     tip, muzzle, core, chestY: hips.position.y + 0.41, spins: [],
+    mounts: { form: 'humanoid', hand: R.hand, offFore: L.fore, head, torso, SW, W } as ItemMounts,
   };
 }
 
@@ -773,6 +776,7 @@ function buildBeast(k: Kit, body: THREE.Group) {
       shinFL: legs.FL.shin, shinFR: legs.FR.shin, shinBL: legs.BL.shin, shinBR: legs.BR.shin,
     },
     tip, muzzle, core, chestY: 0.85, spins: [],
+    mounts: { form: 'beast', jaw, back, legFL: legs.FL.leg, skull, torso, W } as ItemMounts,
   };
 }
 
@@ -860,16 +864,23 @@ function buildFloater(k: Kit, body: THREE.Group) {
   return {
     bones: { core: coreG, handL: L.pivot, handR: R.pivot },
     tip, muzzle, core, chestY: 1.3, spins: [{ obj: ring, speed: 1.1 }],
+    mounts: { form: 'floater', hand: R.hand, offHand: L.hand, core: coreG, R0 } as ItemMounts,
   };
 }
 
-export function buildRobot(spec: CharacterSpec): Robot {
+/** ロボを組み立てる。item＝持たせているアイテム（2026-11-26。形ごとの持ち方は itemModel.ts） */
+export function buildRobot(spec: CharacterSpec, item?: ItemSpec): Robot {
   const k = makeKit(spec);
   const form: Form = spec.form ?? 'humanoid';
   const root = new THREE.Group();
   const body = new THREE.Group();
   root.add(body);
   const built = form === 'beast' ? buildBeast(k, body) : form === 'floater' ? buildFloater(k, body) : buildHumanoid(k, body);
+  if (item) {
+    const held = attachItem(k, built.mounts, item);
+    if (held.tip) built.tip = held.tip;
+    if (held.muzzle) built.muzzle = held.muzzle;
+  }
   const M = k.M;
   const flashMats = [M.primary, M.secondary, M.accent, M.joint];
   return {
@@ -878,6 +889,7 @@ export function buildRobot(spec: CharacterSpec): Robot {
     root,
     body,
     bones: built.bones as Record<string, THREE.Group>,
+    weapon: item && ITEM_TABLE[item.kind].group === 'weapon' ? item.kind : null,
     tip: built.tip,
     muzzle: built.muzzle,
     core: built.core,

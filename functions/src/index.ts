@@ -5,10 +5,12 @@
 // ストーリーで勝ったロボに経験値を足す窓口（/api/robots/win。2026-11-23 から。レベルと経験値を書くのはサーバーだけ）、
 // コンピュータと対戦・ふたりで対戦の戦績を数える窓口（/api/battle/start と /api/battle/end。2026-11-25 から。src/game/record.ts）、
 // ニックネームを決める窓口（/api/profile。2026-11-25 から。src/game/profile.ts）、
-// ランキングを返す窓口（/api/ranking。2026-11-25 から。src/game/ranking.ts）。
+// ランキングを返す窓口（/api/ranking。2026-11-25 から。src/game/ranking.ts）、
+// 写真からアイテム（武器か防具）を作って、アイテムの置き場に入れる窓口（/api/items。2026-11-25 から。server/items.ts）、
+// ガレージのロボにアイテムを持たせる・外す窓口（/api/robots/equip。2026-11-26 から）。
 // Hosting の書き換え（firebase.json）で、同じドメインの /api/** がここに来る。
 // 写真から作れるのは、Google でログインした人だれでも（2026-11-22 から。それまでは家族だけ）。
-// 回数の上限：家族（ALLOWED_EMAILS）は一人一日30回、家族以外は一人一日10回、家族以外の全員を合わせて一日200回。
+// 回数の上限（ロボとアイテムを合わせて数える）：家族（ALLOWED_EMAILS）は一人一日30回、家族以外は一人一日10回、家族以外の全員を合わせて一日200回。
 // ⚠️ 鍵（OPENAI_API_KEY）と、家族のアドレス（ALLOWED_EMAILS）は Secret Manager に置く。リポジトリには書かない。
 
 import { onRequest } from 'firebase-functions/v2/https';
@@ -17,9 +19,11 @@ import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore, type DocumentReference } from 'firebase-admin/firestore';
 import { analyzeImage, cacheKey, refreshText, type SpecCache } from '../../server/analyze';
-import { garageLimit, makeRobot, readRobotInput, readWinInput } from '../../server/garage';
+import { analyzeItem, itemCacheKey, readItemInput, type ItemCache } from '../../server/items';
+import { buildItem, localItemSpec, type Item, type ItemSpec } from '../../src/game/items';
+import { garageLimit, makeRobot, readEquipInput, readRobotInput, readWinInput } from '../../server/garage';
 import { expOf, growthOf, storyWin } from '../../src/game/level';
-import { toRival } from '../../server/rival';
+import { toRival, toRivalItem } from '../../server/rival';
 import { needsTextFix, specHardKanji, withFixedText } from '../../src/game/kanji';
 import { isHash, sanitizeSpec } from '../../src/game/spec';
 import { readStory } from '../../src/game/progress';
@@ -43,6 +47,8 @@ const db = getFirestore();
 db.settings({ ignoreUndefinedProperties: true }); // 写真の無いロボ（thumb が無い）も、そのまま入れる
 
 const robots = (uid: string) => db.collection('users').doc(uid).collection('robots');
+// アイテムの置き場（users/{uid}/items/{写真の印}）。入れるのはサーバーだけ。見る・消すのは本人（firestore.rules）
+const items = (uid: string) => db.collection('users').doc(uid).collection('items');
 // 戦績の整理券（tickets/{id}）。画面からは読めない・書けない（firestore.rules の「ほかは全部だめ」）。
 // 結果を受け取ったら消す（同じ整理券は一回だけ）。結果が届かなかった整理券は残る（いまは量が少ないので、そのまま）
 const tickets = db.collection('tickets');
@@ -149,6 +155,17 @@ const cache: SpecCache = {
   },
 };
 
+// アイテムの設計図の取り置き（ロボと同じ specs に、名前を分けて入れる。server/items.ts の itemCacheKey）
+const itemCache: ItemCache = {
+  async get(key) {
+    const d = await db.collection('specs').doc(key).get();
+    return d.exists ? d.data()?.spec ?? null : null;
+  },
+  async set(key, spec) {
+    await db.collection('specs').doc(key).set({ spec, createdAt: FieldValue.serverTimestamp() });
+  },
+};
+
 function isFamily(email: string | undefined) {
   if (!email) return false;
   const list = ALLOWED_EMAILS.value()
@@ -212,7 +229,9 @@ export const api = onRequest(
     const isEnd = req.path.endsWith('/battle/end');
     const isProfile = req.path.endsWith('/profile');
     const isRanking = req.path.endsWith('/ranking');
-    if (!isAnalyze && !isRobots && !isFix && !isGarage && !isRival && !isWin && !isStart && !isEnd && !isProfile && !isRanking) {
+    const isItems = req.path.endsWith('/items');
+    const isEquip = req.path.endsWith('/robots/equip');
+    if (!isAnalyze && !isRobots && !isFix && !isGarage && !isRival && !isWin && !isStart && !isEnd && !isProfile && !isRanking && !isItems && !isEquip) {
       res.status(404).json({ error: 'not found' });
       return;
     }
@@ -261,6 +280,13 @@ export const api = onRequest(
           const data = await fixRobot(snap.ref, snap.data() as Character).catch(() => snap.data() as Character);
           const robot = toRival(data);
           if (robot) {
+            // 持たせているアイテムも、いっしょに出す（置き場から消えていれば、素手）
+            const seed = typeof data.itemSeed === 'string' ? data.itemSeed : '';
+            if (isHash(seed)) {
+              const it = await snap.ref.parent.parent!.collection('items').doc(seed).get().catch(() => null);
+              const item = it?.exists ? toRivalItem(it.data()) : null;
+              if (item) robot.item = item;
+            }
             res.json({ robot });
             return;
           }
@@ -457,6 +483,90 @@ export const api = onRequest(
           return;
         }
         res.json({ robot: await fixRobot(ref, snap.data() as Character) });
+      } catch (e) {
+        fail(e);
+      }
+      return;
+    }
+
+    // ── ガレージのロボに、アイテムを一つ持たせる・外す（2026-11-26。docs/ITEMS.md の段階4） ──
+    //   ・持たせるアイテムは、その人のアイテムの置き場にあるものだけ。一つのアイテムを何体にでも持たせられる
+    //   ・ロボに書くのは、アイテムの写真の印（itemSeed）だけ。強さは、バトルのときに置き場のアイテムから決める
+    if (isEquip) {
+      try {
+        const inp = readEquipInput(body);
+        if (!inp) {
+          res.status(400).json({ error: 'bad equip' });
+          return;
+        }
+        const ref = robots(user.uid).doc(inp.hash);
+        const out = await db.runTransaction(async (tx) => {
+          const [robot, item] = await Promise.all([tx.get(ref), inp.item ? tx.get(items(user.uid).doc(inp.item)) : Promise.resolve(null)]);
+          if (!robot.exists) return 'missing' as const;
+          if (item && !item.exists) return 'no item' as const;
+          tx.update(ref, { itemSeed: inp.item ?? FieldValue.delete() });
+          return 'ok' as const;
+        });
+        if (out === 'missing') res.status(404).json({ error: 'not found' });
+        else if (out === 'no item') res.status(404).json({ error: 'no item' });
+        else res.json({ item: inp.item }); // ガレージの一覧は onSnapshot で新しくなる
+      } catch (e) {
+        fail(e);
+      }
+      return;
+    }
+
+    // ── 写真からアイテムを作って、アイテムの置き場に入れる（2026-11-25。docs/ITEMS.md の段階2） ──
+    //   ・同じ写真のアイテムがもうあれば、それを返す（回数に数えない）
+    //   ・置き場の上限はガレージと同じ（30個、家族は100個）。作る回数は、ロボと合わせて数える（countUp）
+    //   ・AI につながらなければ、写真の印と色から作る（ロボと同じく、遊べなくならないように）
+    //   ・強さ（総合力とランク）は、写真の印から決める（src/game/items.ts の itemPower）
+    if (isItems) {
+      try {
+        const inp = readItemInput(body);
+        if (!inp) {
+          res.status(400).json({ error: 'bad item' });
+          return;
+        }
+        const ref = items(user.uid).doc(inp.hash);
+        const have = await ref.get();
+        if (have.exists) {
+          res.json({ item: have.data(), again: true });
+          return;
+        }
+        if ((await items(user.uid).select().limit(limit).get()).size >= limit) {
+          res.status(409).json({ error: 'items full', limit });
+          return;
+        }
+        const hit = await itemCache.get(itemCacheKey(inp.hash)).catch(() => null);
+        const count = hit ? 'ok' : await countUp(user.uid, family);
+        if (count !== 'ok') {
+          res.status(429).json({ error: count === 'all' ? 'everyone limit' : 'daily limit', limit: family ? FAMILY_DAILY : GUEST_DAILY });
+          return;
+        }
+        let spec: ItemSpec;
+        let source: Item['source'] = 'ai';
+        try {
+          spec = (await analyzeItem(inp.image, inp.hash, { apiKey: OPENAI_API_KEY.value(), model: MODEL, cache: itemCache })).spec;
+        } catch (e) {
+          console.warn(`[item] AI につながらない → 写真の色から：${String((e as Error).message).slice(0, 200)}`);
+          spec = localItemSpec(inp.hash, inp.colors);
+          source = 'local';
+        }
+        const made = buildItem(spec, inp.hash, source, inp.thumb);
+        const out = await db.runTransaction(async (tx) => {
+          const cur = await tx.get(ref);
+          if (cur.exists) return cur.data() as Item;
+          const n = (await tx.get(items(user.uid).select().limit(limit))).size;
+          if (n >= limit) return 'full' as const;
+          tx.set(ref, made);
+          return made;
+        });
+        if (out === 'full') res.status(409).json({ error: 'items full', limit });
+        else {
+          console.log(`[item] ${spec.motif} → ${spec.name}（${spec.kind}・${made.rank}・${source}）`);
+          res.json({ item: out });
+        }
       } catch (e) {
         fail(e);
       }

@@ -245,6 +245,50 @@ export class Effects {
     });
   }
 
+  /**
+   * 魔法陣（つえの魔法。2026-11-26）。二重の円・三角を二つ重ねた星・小さな玉。
+   * face の向きに面を向けて、くるっと回りながら開き、hold 秒とどまってから消える
+   */
+  magicCircle(pos: THREE.Vector3, color: THREE.ColorRepresentation, face: THREE.Vector3, radius = 0.6, hold = 0.5) {
+    const g = new THREE.Group();
+    g.position.copy(pos);
+    g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), face.clone().normalize());
+    const outer = new THREE.Group(); // 外の円と玉（右回り）
+    const inner = new THREE.Group(); // 星と内の円（左回り）
+    g.add(outer, inner);
+    const mats: THREE.MeshBasicMaterial[] = [];
+    const m = (k: number, op = 1) => {
+      const x = addMat(color, k, op);
+      mats.push(x);
+      return x;
+    };
+    const glow = new THREE.Mesh(new THREE.CircleGeometry(1, 48), m(1.2, 0.22)); // うっすら光る面
+    g.add(glow);
+    outer.add(new THREE.Mesh(new THREE.RingGeometry(0.93, 1, 72), m(2.8)));
+    outer.add(new THREE.Mesh(new THREE.RingGeometry(0.76, 0.79, 72), m(2.4)));
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const dot = new THREE.Mesh(new THREE.CircleGeometry(0.045, 12), m(3));
+      dot.position.set(Math.cos(a) * 0.865, Math.sin(a) * 0.865, 0);
+      outer.add(dot);
+    }
+    for (const a of [Math.PI / 2, -Math.PI / 2]) {
+      inner.add(new THREE.Mesh(new THREE.RingGeometry(0.68, 0.74, 3, 1, a, Math.PI * 2), m(2.6)));
+    }
+    inner.add(new THREE.Mesh(new THREE.RingGeometry(0.3, 0.33, 48), m(2.4)));
+    const open = 0.22;
+    const total = open + hold + 0.25;
+    return this.temp(g, total, (k) => {
+      const t = k * total;
+      const s = t < open ? Ease.outBack(t / open) : 1;
+      g.scale.setScalar(Math.max(0.01, s * radius));
+      outer.rotation.z = t * 2.2;
+      inner.rotation.z = -t * 3;
+      const fade = t > open + hold ? 1 - (t - open - hold) / 0.25 : 1;
+      mats.forEach((x, i) => (x.opacity = (i === 0 ? 0.22 : 1) * Math.max(0, fade)));
+    });
+  }
+
   // 中心へ吸い込まれる光（ためる）
   gather(pos: () => THREE.Vector3, color: THREE.ColorRepresentation, dur = 1, rate = 50) {
     let acc = 0;

@@ -8,10 +8,10 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { CharacterSpec, UltStyle } from '../game/types';
 import { ELEMENT_INFO } from '../game/data';
-import { wornParts } from '../game/items';
 import { Ease, lerp, Tweener, type EaseFn } from './anim';
 import { Effects, addMat } from './effects';
 import { sfx } from '../lib/sfx';
+import type { ItemSpec } from '../game/items';
 import { buildRobot, posesOf, setPose, toPose, type Pose, type PoseName, type Robot } from './robot';
 
 export type Side = 0 | 1;
@@ -205,10 +205,12 @@ export class Stage {
     this.down = [false, false];
   }
 
-  setFighters(a: CharacterSpec, b: CharacterSpec) {
+  /** バトルの二体を置く。itemA・itemB＝それぞれが持っているアイテム（2026-11-26） */
+  setFighters(a: CharacterSpec, b: CharacterSpec, itemA?: ItemSpec, itemB?: ItemSpec) {
     this.clearRobots();
+    const items = [itemA, itemB];
     [a, b].forEach((spec, i) => {
-      const r = buildRobot(spec);
+      const r = buildRobot(spec, items[i]);
       r.root.position.set(this.homeX[i], 0, 0);
       r.root.rotation.y = ANGLED[i];
       setPose(r, posesOf(r).idle);
@@ -219,9 +221,9 @@ export class Stage {
     });
   }
 
-  setShowcase(spec: CharacterSpec) {
+  setShowcase(spec: CharacterSpec, item?: ItemSpec) {
     this.clearRobots();
-    const r = buildRobot(spec);
+    const r = buildRobot(spec, item);
     r.root.rotation.y = 0.5;
     setPose(r, posesOf(r).idle);
     this.scene.add(r.root);
@@ -459,10 +461,15 @@ export class Stage {
     ]);
   }
 
+  /**
+   * アタックとスキルのこうげき。動きは、持っている武器で変わる（2026-11-26。docs/ITEMS.md の段階5）：
+   * けん・おの＝ふりおろす／やり＝つく／じゅう＝撃つ／つえ＝魔法陣から光の玉／素手・防具＝パンチ
+   */
   async attack(side: Side, hits: number, onImpact: ImpactFn, variant: 'normal' | 'skill' | 'hex' = 'normal') {
-    const w = wornParts(this.robots[side]!.spec).weapon;
+    const w = this.robots[side]!.weapon;
     if (variant === 'hex') return this.orb(side, onImpact);
-    if (w === 'rifle') return this.shoot(side, hits, onImpact, variant === 'skill');
+    if (w === 'gun') return this.shoot(side, hits, onImpact, variant === 'skill');
+    if (w === 'staff') return this.magic(side, hits, onImpact, variant === 'skill');
     return this.melee(side, hits, onImpact);
   }
 
@@ -471,7 +478,8 @@ export class Stage {
     const foe = (1 - side) as Side;
     const dir = this.dir(side);
     const c = this.color(side);
-    const swing = ['sword', 'hammer'].includes(wornParts(r.spec).weapon);
+    const w = r.weapon;
+    const swing = w === 'sword' || w === 'axe';
     const wind = swing ? 'windup' : 'pullback';
     const strike = swing ? 'slash' : 'thrust';
     const home = this.homeX[side];
@@ -486,8 +494,21 @@ export class Stage {
       sfx('swing');
       await this.pose(side, strike, 0.09, Ease.outQuad);
       const at = this.chest(foe);
-      if (swing) {
+      if (w === 'axe') {
+        // おの：重く、たてにふりおろす。足もとに火花
+        this.fx.arc(at, c, 1.35, new THREE.Euler(0, 0, dir > 0 ? -Math.PI / 3 : Math.PI / 3), 0.38, Math.PI);
+        this.fx.burst(this.feet(foe), '#ffd27a', { count: 14, speed: 3, up: 1.6, size: 0.16, life: 0.4, gravity: 6 });
+        this.shake(0.12);
+      } else if (swing) {
         this.fx.arc(at, c, 1.0, new THREE.Euler((Math.random() - 0.5) * 0.8, 0, -0.4 - Math.random() * 0.8), 0.3);
+      } else if (w === 'spear') {
+        // やり：まっすぐな光の筋が、相手をつきぬける
+        const from = at.clone();
+        from.x -= dir * 1.3;
+        const to = at.clone();
+        to.x += dir * 0.9;
+        this.fx.beam(from, to, c, 0.05, 0.2, 1.2);
+        this.fx.ring(at, c, 0.6, 0.2, false, 0.25);
       } else {
         this.fx.ring(at, c, 0.9, 0.25, false, 0.2);
       }
@@ -517,6 +538,48 @@ export class Stage {
       await this.wait(0.1);
     }
     await this.wait(0.15);
+    await Promise.all([this.pose(side, 'idle', 0.3), this.face(side, false, 0.3)]);
+  }
+
+  /**
+   * つえの魔法（2026-11-26、持ち主の希望「魔法っぽい見た目」）。
+   * つえの先に魔法陣が開き、属性の色の光の玉が飛んで、当たると光がはじける。
+   * イヌ型は、口にくわえたつえの先から放つ（つえの先＝r.tip。形ごとの持ち方は itemModel.ts）
+   */
+  private async magic(side: Side, hits: number, onImpact: ImpactFn, heavy: boolean) {
+    const r = this.robots[side]!;
+    const foe = (1 - side) as Side;
+    const c = this.color(side);
+    const dir = this.dir(side);
+    await Promise.all([this.pose(side, 'aim', 0.2), this.face(side, true, 0.2)]);
+    const tip = () => this.world(r.tip);
+    // 魔法陣は、つえの先の少し前に、相手のほうへ面を向けて開く
+    const circleAt = () => tip().add(new THREE.Vector3(dir * 0.18, 0, 0));
+    const hold = 0.35 + hits * 0.28;
+    sfx('magic');
+    // 真横に向けると、カメラから細い線にしか見えないので、カメラのほうへ半分ほど向ける
+    const toCam = this.camera.position.clone().sub(circleAt()).setY(0).normalize();
+    const face = new THREE.Vector3(dir * 0.6, 0, 0).add(toCam.multiplyScalar(0.8)).normalize();
+    void this.fx.magicCircle(circleAt(), c, face, heavy ? 0.75 : 0.55, hold);
+    this.fx.gather(tip, c, 0.3, 70);
+    this.lightKick(c, 10, 0.6);
+    await this.wait(0.3);
+    for (let i = 0; i < hits; i++) {
+      const from = circleAt();
+      sfx('orb');
+      this.fx.burst(from, c, { count: 8, speed: 1.6, size: 0.2, life: 0.25 });
+      const to = this.chest(foe);
+      to.y += (Math.random() - 0.5) * 0.3;
+      await this.fx.projectile(from, to, c, heavy ? 0.32 : 0.26, heavy ? 0.22 : 0.17);
+      // 当たると、光がはじける
+      this.fx.sphere(to, c, heavy ? 1.0 : 0.75, 0.35);
+      this.fx.ring(to, c, heavy ? 1.3 : 1.0, 0.35, false, 0.15);
+      this.fx.burst(to, c, { count: 22, speed: 3.2, size: 0.2, life: 0.45, drag: 2 });
+      this.fx.burst(to, '#ffffff', { count: 8, speed: 2, size: 0.14, life: 0.3 });
+      onImpact(i);
+      if (i < hits - 1) await this.wait(0.08);
+    }
+    await this.wait(0.2);
     await Promise.all([this.pose(side, 'idle', 0.3), this.face(side, false, 0.3)]);
   }
 

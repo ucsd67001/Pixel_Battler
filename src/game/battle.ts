@@ -4,6 +4,7 @@
 import type { Character } from './types';
 import { elementMultiplier, ULT_POWER, ULT_TABLE } from './data';
 import { fightMult, spFor } from './level';
+import { gearOf } from './items';
 
 const BONUS_SKILL = 1.1;
 
@@ -96,8 +97,9 @@ function makeFighter(c: Character): Fighter {
 }
 
 export function createBattle(player: Character, cpu: Character): BattleState {
-  const pf = player.spec.trait === 'first';
-  const cf = cpu.spec.trait === 'first';
+  // 先に動く：「先手」の特性か、じゅう（アイテム）を持っているほう
+  const pf = player.spec.trait === 'first' || gearOf(player).first;
+  const cf = cpu.spec.trait === 'first' || gearOf(cpu).first;
   return {
     f: [makeFighter(player), makeFighter(cpu)],
     turn: 1,
@@ -115,7 +117,7 @@ export function canUse(st: BattleState, side: Side, type: ActionType): boolean {
 }
 
 function addGauge(f: Fighter, n: number) {
-  const m = f.c.spec.trait === 'fighter' ? 1.6 : 1;
+  const m = (f.c.spec.trait === 'fighter' ? 1.6 : 1) * gearOf(f.c).gauge; // じゅうは、必殺ゲージが早くたまる
   f.gauge = Math.min(MAX_GAUGE, f.gauge + Math.round(n * m));
 }
 
@@ -135,7 +137,8 @@ export function startTurn(st: BattleState): PreTurn {
   me.guarding = false;
   if (me.cooldown > 0) me.cooldown--;
   // SP のたまる量も、レベルの倍率で大きくする（スキルに使う SP も同じ割合で大きいので、使える回数は Lv1 と同じ）
-  me.sp = Math.min(me.c.stats.sp, me.sp + spFor(me.c, me.c.spec.trait === 'focus' ? 20 : 10));
+  // つえ（アイテム）は、さらに少したまる
+  me.sp = Math.min(me.c.stats.sp, me.sp + spFor(me.c, (me.c.spec.trait === 'focus' ? 20 : 10) + gearOf(me.c).sp));
   let regen = 0;
   if (me.c.spec.trait === 'regen' && me.hp > 0 && me.hp < me.c.stats.hp) {
     regen = Math.min(me.c.stats.hp - me.hp, Math.round(me.c.stats.hp * 0.018));
@@ -182,8 +185,13 @@ function dealDamage(st: BattleState, attacker: Side, mult: number, rng: Rng, opt
   let def = D.c.stats.def * buffMult(D, 'def');
   if (D.c.spec.trait === 'ironwall' && D.hp < D.c.stats.hp / 2) def *= 1.6;
   if (A.c.spec.trait === 'pierce') def *= 0.75;
+  // アイテムの持ち味（HP・こうげき・ぼうぎょの分は、withItem で数字に入っている）
+  const ga = gearOf(A.c);
+  const gd = gearOf(D.c);
+  def *= 1 - ga.pierce; // やり
   let m = mult;
   if (A.c.spec.trait === 'focus' && opts.skill) m *= 1.35;
+  if (opts.skill) m *= ga.skill; // つえ
   if (A.c.spec.bonus && (opts.skill || opts.ult)) m *= BONUS_SKILL; // 特別な写真のロボは、技が少し強い
   if (A.c.spec.trait === 'first' && !A.firstUsed) m *= 1.5;
   const eff = elementMultiplier(A.c.spec.element, D.c.spec.element);
@@ -191,13 +199,21 @@ function dealDamage(st: BattleState, attacker: Side, mult: number, rng: Rng, opt
   if (D.c.spec.trait === 'evade' && rng() < 0.12) {
     return { target: t, amount: 0, crit: false, eff, guarded: false, hpAfter: D.hp, guts: false, miss: true };
   }
-  const crit = rng() < (A.c.spec.trait === 'lucky' ? 0.3 : 0.08);
+  // おの（アイテム）：ときどき空ぶりする（必殺技とカウンターは空ぶりしない）。
+  // さいころは、おのを持っているときだけふる（持っていないバトルは、いままでと同じ結果になる）
+  if (ga.miss && !opts.ult && !opts.isCounter && rng() < ga.miss) {
+    return { target: t, amount: 0, crit: false, eff, guarded: false, hpAfter: D.hp, guts: false, miss: true };
+  }
+  // かぶと（アイテム）：会心の一打を受けにくく、受けても小さい
+  const crit = rng() < (A.c.spec.trait === 'lucky' ? 0.3 : 0.08) * gd.critGuard;
+  const critMult = 1 + 0.5 * gd.critGuard;
   // ぼうぎょの効き方の「300」は、受ける側のレベルの倍率で大きくする。
   // こうすると、同じレベルどうしなら Lv1 でも Lv99 でもバトルの長さが同じになる（数字が大きくなっても、ぼうぎょが効きすぎない）
   const K = 300 * fightMult(D.c);
-  let dmg = atk * m * 1.35 * (K / (K + def)) * eff * (crit ? 1.5 : 1) * (0.92 + rng() * 0.16);
+  let dmg = atk * m * 1.35 * (K / (K + def)) * eff * (crit ? critMult : 1) * (0.92 + rng() * 0.16);
   const guarded = D.guarding && !opts.ignoreGuard;
-  if (guarded) dmg *= opts.ult ? 0.5 : 0.4;
+  dmg *= gd.taken; // たて（アイテム）は、いつも少しへらす
+  if (guarded) dmg *= (opts.ult ? 0.5 : 0.4) * gd.guard; // ガードすると、もっとへらす
   if (D.counter && !opts.isCounter) dmg *= 0.5;
   let amount = Math.max(1, Math.round(dmg));
   let guts = false;

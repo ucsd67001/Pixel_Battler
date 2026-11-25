@@ -5,7 +5,7 @@
 写真を読み込むと、その写真の「いちばん特徴的なもの」をもとに SD ロボが生まれ、コマンドで戦うブラウザゲーム。
 バーコードバトラーの「読み込んで、生まれて、戦う」を、3D と演出で今風にしたもの。**ストーリー**（章ごとの5連戦。勝つとロボが育つ）のほか、コンピュータの敵（9体）や、ほかの人が作ったロボ（だれかのロボ）と戦う「コンピュータと対戦」、ふたりで対戦がある。
 
-ゲームの考え方と作りのまとめは **[docs/DESIGN.md](docs/DESIGN.md)**。ストーリーとレベルを決めたいきさつと、手下の一覧は **[docs/STORY.md](docs/STORY.md)**。
+ゲームの考え方と作りのまとめは **[docs/DESIGN.md](docs/DESIGN.md)**。ストーリーとレベルを決めたいきさつと、手下の一覧は **[docs/STORY.md](docs/STORY.md)**。アイテム（武器と防具）の設計と作った段階は **[docs/ITEMS.md](docs/ITEMS.md)**。
 
 ## 動かし方（PC）
 
@@ -69,26 +69,28 @@ cd C:\Users\ucsd6\OneDrive\デスクトップ\pixelbattler; firebase functions:s
 | 場所 | 中身 |
 |---|---|
 | `server/analyze.ts` | 写真を OpenAI に読ませて、設計図（JSON）を受け取る。**Firebase の Cloud Functions に移すときは、ここをそのまま呼ぶ** |
+| `server/items.ts` | 写真を OpenAI に読ませて、アイテム（武器か防具）の設計図を受け取る（2026-11-25） |
 | `server/garage.ts`・`server/rival.ts` | ガレージに入れるロボをサーバーで組み立て直す・勝ちの知らせを確かめる／だれかのロボとして送る形にする |
-| `vite.config.ts` | 開発サーバーに `/api/health`・`/api/analyze`・`/api/fix-text`・`/api/rival`・`/api/ranking` を足している（鍵の読み込みもここ）。本番のファイルは、変わりにくい部品（3D・Firebase・React）を別のファイルに分ける |
-| `functions/src/index.ts` | Firebase の窓口（`/api/health`・`analyze`・`robots`・`robots/fix`・`robots/win`・`garage`・`rival`・`battle/start`・`battle/end`・`profile`・`ranking`）。ログインと一日の回数を確かめてから、`server/` の決まりを呼ぶ。`migrate.ts`＝本番のデータを一度だけ書き直す（2026-11-25 の経験値の表。終わったら消す） |
+| `vite.config.ts` | 開発サーバーに `/api/health`・`/api/analyze`・`/api/items`・`/api/fix-text`・`/api/rival`・`/api/ranking` を足している（鍵の読み込みもここ）。本番のファイルは、変わりにくい部品（3D・Firebase・React）を別のファイルに分ける |
+| `functions/src/index.ts` | Firebase の窓口（`/api/health`・`analyze`・`robots`・`robots/fix`・`robots/win`・`robots/equip`・`garage`・`rival`・`battle/start`・`battle/end`・`profile`・`ranking`・`items`）。ログインと一日の回数を確かめてから、`server/` の決まりを呼ぶ。`migrate.ts`＝本番のデータを一度だけ書き直す（2026-11-25 の経験値の表。終わったら消す） |
 | `src/lib/` | `firebase.ts`＝Google ログイン、`api.ts`＝サーバーの窓口を呼ぶ（ログインの印を付ける `postApi`）、`sfx.ts`＝効果音 |
-| `src/game/` | ゲームの決まり（画面と切り離した計算）。`battle.ts`＝バトル、`stats.ts`＝数値、`data.ts`＝スキル・特性・属性の表、`level.ts`＝レベルと経験値、`story.ts`＝章の中身、`progress.ts`＝ストーリーの進み具合（サーバーも使う）、`minions.ts`＝手下36体、`thinkers.ts`＝10章から先の人物、`cpu.ts`＝コンピュータの敵と考え方、`garage.ts`＝ガレージ（と戦績の読み書き）、`record.ts`＝戦績の決まり、`profile.ts`＝ニックネームの決まり、`ranking.ts`＝ランキングの並べ方（どれもサーバーも使う） |
+| `src/game/` | ゲームの決まり（画面と切り離した計算）。`battle.ts`＝バトル、`stats.ts`＝数値、`data.ts`＝スキル・特性・属性の表、`level.ts`＝レベルと経験値、`story.ts`＝章の中身、`progress.ts`＝ストーリーの進み具合（サーバーも使う）、`minions.ts`＝手下36体、`thinkers.ts`＝10章から先の人物、`cpu.ts`＝コンピュータの敵と考え方、`garage.ts`＝ガレージ（と戦績の読み書き）、`record.ts`＝戦績の決まり、`profile.ts`＝ニックネームの決まり、`ranking.ts`＝ランキングの並べ方、`items.ts`＝アイテム（武器と防具）の種類・持ち味・強さ（どれもサーバーも使う）、`itemBox.ts`＝アイテムの置き場 |
 | `src/three/` | 3D。`robot.ts`＝部品を組むロボとポーズ、`stage.ts`＝バトル場と演出、`effects.ts`＝光・ビーム・斬撃 |
-| `src/ui/` | 画面（タイトル・あそびかた・マイページ・ランキング・作成・ガレージ・ストーリー・バトル・部屋）と、スマホのメニュー（`NavMenu.tsx`） |
+| `src/ui/` | 画面（タイトル・あそびかた・マイページ・ランキング・作成・ガレージ・アイテムの置き場・ストーリー・バトル・部屋）と、スマホのメニュー（`NavMenu.tsx`） |
 | `scripts/` | `sim.ts`＝釣り合いの確かめ（`npm run sim`）、`tune-minions.ts`＝手下の強さ合わせ（`npm run tune:minions`）、`battle-lib.ts`＝その二つの共通の部品、`check-kanji.mjs`＝習わない漢字の点検 |
 
 ### 決めたこと
 
 - **AIには選ばせるだけ、数字は機械が決める**：AIが選ぶのは名前・見た目の部品・色・属性・スキルの種類・能力の傾向（1〜5）。HP・攻撃などの数値とスキルの威力は、写真の印と表から機械で決める（強すぎるロボが出ないように）
-- **プラモ方式の3D**：部品（頭6種・胴3・腕3・脚3・背中5・武器7）を組み合わせて色を塗る。いまは、どのロボも素手で戦う（武器・腕の刃・背中の大砲は外して見せる。あとで入れるアイテムの準備。`src/game/items.ts`）。関節（骨組み）を持っているので、ポーズで動かせる
+- **プラモ方式の3D**：部品（頭6種・胴3・腕3・脚3・背中5・武器7）を組み合わせて色を塗る。もとの武器・腕の刃・背中の大砲は外して見せ、写真から作ったアイテム（武器と防具）を持たせると、それを持って戦う（`src/game/items.ts`・`src/three/itemModel.ts`）。関節（骨組み）を持っているので、ポーズで動かせる
 - **体の形は三つ**：人型（humanoid）・四つ足の獣型（beast）・浮遊型（floater）。AIが写真のモチーフに合わせて選ぶ。どの形も頭を大きくした SD の比率。体の形はステータスに影響しない（見た目と動きだけ）
 - **ランク**：総合力が写真ごとに ±8% ゆれる（S/A/B/C）。バーコードバトラーの「強いバーコード」の楽しみ
 - 釣り合い（2026-11-23）：コンピュータの敵へのランダムなロボの勝率 約50%（敵ごとに 47〜53%）・1戦あたり約17行動・必殺技は1戦に約3回。ストーリーの通しの遊び方も `npm run sim` で確かめる
 
 ## これから（MVPの先）
 
-- ストーリーの11章から先・節目のごほうび・マイページ・アイテム（docs/STORY.md の「まだ決めていないこと」）
+- ストーリーの11章から先・節目のごほうび（docs/STORY.md の「まだ決めていないこと」）
+- アイテム（武器と防具。docs/ITEMS.md。2026-11-25 に決めた。段階1（決まりと数字）・段階2（写真から作る）・段階3（アイテムの置き場）・段階4（持たせる・3D の見た目）・段階5（バトルで使う。つえは魔法）まで作った）
 - 写真から3Dモデルを作るサービスとの組み合わせ（見た目の自由度を上げる）
 
 ## 小学6年生向けの言葉

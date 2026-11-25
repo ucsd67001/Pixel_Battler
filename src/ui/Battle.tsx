@@ -7,6 +7,7 @@ import {
   type ActionResult, type ActionType, type BattleState, type Hit, type Side,
 } from '../game/battle';
 import { ELEMENT_INFO, SKILL_TABLE } from '../game/data';
+import { ITEM_TABLE, itemEffectText } from '../game/items';
 import type { Stage } from '../three/stage';
 import { StageView } from './StageView';
 import { Term } from './Term';
@@ -110,6 +111,15 @@ function SidePanel({ c, h, side }: { c: Character; h: SideHud; side: Side }) {
         <span className="hud-num small">{h.gauge >= MAX_GAUGE ? 'MAX' : `${h.gauge}%`}</span>
       </div>
       <div className="hud-status">
+        {c.item && (
+          <Term
+            tip={{ title: `${c.item.spec.name}（${ITEM_TABLE[c.item.spec.kind].label}・ランク${c.item.rank}）`, body: `持ち味：${itemEffectText(c.item)}` }}
+            mark={false}
+            className="st item"
+          >
+            {ITEM_TABLE[c.item.spec.kind].label}
+          </Term>
+        )}
         {h.guarding && (
           <Term tip={GLOSSARY.guard} mark={false} className="st good">
             ガード中
@@ -455,7 +465,7 @@ export function Battle({
         onReady={(s) => {
           stage.current = s;
           s.speed = speedRef.current;
-          s.setFighters(player.spec, enemy.spec);
+          s.setFighters(player.spec, enemy.spec, player.item?.spec, enemy.item?.spec);
           run().catch((e) => {
             if (alive.current) console.error(e);
           });

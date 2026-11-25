@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { CharacterSpec } from '../game/types';
+import type { ItemSpec } from '../game/items';
 import { Stage, type StageMode } from '../three/stage';
 
 export function StageView({
@@ -24,13 +25,24 @@ export function StageView({
 }
 
 // 一体だけを台座の上で回して見せる
-export function Showcase({ spec, reveal, className }: { spec: CharacterSpec; reveal?: boolean; className?: string }) {
+// item＝持たせているアイテム（2026-11-26）
+export function Showcase({
+  spec,
+  item,
+  reveal,
+  className,
+}: {
+  spec: CharacterSpec;
+  item?: ItemSpec;
+  reveal?: boolean;
+  className?: string;
+}) {
   const stage = useRef<Stage | null>(null);
-  const shown = useRef<CharacterSpec | null>(null);
+  const shown = useRef<{ spec: CharacterSpec; item?: ItemSpec } | null>(null);
   const show = (s: Stage) => {
-    if (shown.current === spec) return;
-    shown.current = spec;
-    s.setShowcase(spec);
+    if (shown.current?.spec === spec && shown.current.item === item) return;
+    shown.current = { spec, item };
+    s.setShowcase(spec, item);
     if (reveal) s.reveal();
   };
   useEffect(() => {

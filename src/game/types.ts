@@ -1,6 +1,7 @@
 // ロボの設計図（AIが写真から決める部分）と、ゲームで使う形
 
 import type { BattleRecord } from './record';
+import type { Item } from './items';
 
 export const FORMS = ['humanoid', 'beast', 'floater'] as const;
 // 属性（2026-11-23 から6種類）：火・水・地・風の4すくみと、光・夜。
@@ -104,6 +105,11 @@ export interface Character {
   level?: number;
   // そのロボの戦績（2026-11-25 から数える。src/game/record.ts の BattleRecord の形。書きこむのはサーバーだけ）
   record?: Partial<BattleRecord>;
+  // ガレージのロボに持たせているアイテムの写真の印（2026-11-26。一つだけ。アイテムの置き場 users/{uid}/items のどれか）。
+  // 書きこむのはサーバーだけ（/api/robots/equip）。アイテムを置き場から消すと、持っていないのと同じになる
+  itemSeed?: string;
+  // バトルで持っているアイテム（withItem で付く。src/game/items.ts）。HP・こうげき・ぼうぎょの分は、stats に入っている
+  item?: Item;
   // ストーリーのバトルで、そのレベルの数字にしてあるロボ（atLevel で付く）。バトルの計算が、SP のたまり方とぼうぎょの効き方を合わせるのに使う
   fightLevel?: number;
 }
