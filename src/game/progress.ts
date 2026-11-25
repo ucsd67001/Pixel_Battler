@@ -18,9 +18,13 @@ export const BOSS_SLOT = CHAPTER_SIZE - 1;
 export const chapterLevel = (no: number) => 3 * no - 2;
 
 // ── 進み具合（ログインしているときは Firestore の users/{uid} の story。書くのはサーバーだけ） ──
+//   ・クリアした章は、5体ともえらんで何度でも戦える
+//   ・まだクリアしていない章（いちばん先の章）は、いちばん先にたどり着いた敵まで、えらんで戦える。
+//     前に倒した敵ともう一度戦っても、たどり着いたところは下がらない（2026-11-25、持ち主の希望。
+//     それまでは「1体目から やり直す」で、たどり着いたところが1体目にもどっていた）
 export interface StoryProgress {
   cleared: number; // クリアした章のいちばん大きい番号（0＝まだ）
-  run: { chapter: number; next: number } | null; // いま進めている章と、次に戦う敵（0〜4）
+  run: { chapter: number; next: number } | null; // いちばん先の章（cleared+1）と、そこでたどり着いた敵（1〜4。まだ戦っていない敵）
 }
 
 export const EMPTY_STORY: StoryProgress = { cleared: 0, run: null };
@@ -30,7 +34,8 @@ export function readStory(raw: any): StoryProgress {
   const cleared = Math.min(MAX_CHAPTER, Math.max(0, Math.floor(Number(raw?.cleared) || 0)));
   const c = Math.floor(Number(raw?.run?.chapter));
   const n = Math.floor(Number(raw?.run?.next));
-  const run = c >= 1 && c <= MAX_CHAPTER && n >= 1 && n <= BOSS_SLOT ? { chapter: c, next: n } : null;
+  // クリアした章の run（前の決まりで、クリアした章をやり直していたもの）は、もう使わない
+  const run = c === cleared + 1 && c <= MAX_CHAPTER && n >= 1 && n <= BOSS_SLOT ? { chapter: c, next: n } : null;
   return { cleared, run };
 }
 
@@ -38,17 +43,25 @@ export function readStory(raw: any): StoryProgress {
 export const isOpen = (p: StoryProgress, no: number) =>
   no >= 1 && no <= Math.min(STORY_CHAPTERS, p.cleared + 1);
 
-/** その章で、次に戦う敵（0〜4） */
-export const nextSlot = (p: StoryProgress, no: number) => (p.run?.chapter === no ? p.run.next : 0);
-
-/** その勝ちを数えてよいか：開いている章で、1体目か、続きの敵 */
-export function canWin(p: StoryProgress, no: number, slot: number): boolean {
-  if (!isOpen(p, no) || slot < 0 || slot > BOSS_SLOT) return false;
-  return slot === 0 || nextSlot(p, no) === slot;
+/** その章で、えらんで戦える敵のいちばん先（0〜4）。開いていない章は -1 */
+export function reachOf(p: StoryProgress, no: number): number {
+  if (!isOpen(p, no)) return -1;
+  if (no <= p.cleared) return BOSS_SLOT;
+  return p.run?.chapter === no ? p.run.next : 0;
 }
 
-/** 勝ったあとの進み具合 */
+/** その章を開いたときに、はじめにえらんでおく敵（いちばん先の章は、たどり着いた敵。クリアした章は1体目） */
+export const nextSlot = (p: StoryProgress, no: number) => (no <= p.cleared ? 0 : Math.max(0, reachOf(p, no)));
+
+/** その敵と戦えるか（＝勝ちを数えてよいか）：開いている章で、たどり着いた敵まで */
+export function canWin(p: StoryProgress, no: number, slot: number): boolean {
+  return Number.isInteger(slot) && slot >= 0 && slot <= reachOf(p, no);
+}
+
+/** 勝ったあとの進み具合（たどり着いたところは下がらない） */
 export function afterWin(p: StoryProgress, no: number, slot: number): StoryProgress {
+  if (no <= p.cleared) return p; // クリアした章：進み具合は変わらない
   if (slot >= BOSS_SLOT) return { cleared: Math.max(p.cleared, no), run: null };
-  return { cleared: p.cleared, run: { chapter: no, next: slot + 1 } };
+  const next = Math.max(slot + 1, p.run?.chapter === no ? p.run.next : 0);
+  return { cleared: p.cleared, run: { chapter: no, next } };
 }

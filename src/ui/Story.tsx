@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Character, Element } from '../game/types';
 import { useGarage, useStory, type WinResult } from '../game/garage';
 import {
-  BOSS_SLOT, CHAPTER_SIZE, CHAPTERS, chapterElements, chapterLevel, chapterOf, enemyAt, isOpen, nextSlot,
+  BOSS_SLOT, CHAPTER_SIZE, CHAPTERS, chapterElements, chapterLevel, chapterOf, enemyAt, isOpen, nextSlot, reachOf,
   type StoryProgress,
 } from '../game/story';
 import { atLevel, BOSS_EXP_RATE, EXP_PER_WIN, levelOf } from '../game/level';
@@ -93,8 +93,13 @@ export function ChapterView({
   const story = useStory();
   const ch = chapterOf(no);
   const next = story ? nextSlot(story, no) : 0;
+  // えらんで戦える敵のいちばん先（クリアした章は5体とも。いちばん先の章は、たどり着いた敵まで）
+  const reach = story ? reachOf(story, no) : -1;
+  const cleared = !!story && no <= story.cleared;
   const [view, setView] = useState<number | null>(null);
   const shown = view ?? next;
+  const canFight = shown <= reach;
+  const slotLabel = (s: number) => (s === BOSS_SLOT ? 'ボス' : `${s + 1}体目`);
   const enemy = enemyAt(no, shown);
   if (!ch) return null;
   // 光と夜は、おたがいに大ダメージ（「有利」ではない）
@@ -121,8 +126,8 @@ export function ChapterView({
         <div className="slot-list">
           {[0, 1, 2, 3, 4].map((slot) => {
             const e = enemyAt(no, slot)!;
-            const done = slot < next;
-            const cls = done ? 'done' : slot === next ? 'next' : 'later';
+            const done = cleared || slot < reach; // 倒したことのある敵
+            const cls = done ? 'done' : slot === reach ? 'next' : 'later';
             return (
               <button
                 key={slot}
@@ -137,22 +142,23 @@ export function ChapterView({
                     {ELEMENT_INFO[e.spec.element].label} ・ {e.spec.title}
                   </small>
                 </span>
-                <span className="slot-state">{done ? '✓' : slot === next ? '▶' : ''}</span>
+                <span className="slot-state">{done ? '✓' : slot === reach ? '▶' : ''}</span>
               </button>
             );
           })}
         </div>
         <div className="actions">
-          <button className="btn primary big" disabled={!story} onClick={() => onFight(next)}>
-            {next === 0 ? '1体目から ちょうせん！' : next === BOSS_SLOT ? 'ボスに ちょうせん！' : `${next + 1}体目に ちょうせん！`}
+          {/* えらんだ敵と戦う（2026-11-25 から。倒したことのある敵とは、何度でも戦える。たどり着いたところは下がらない） */}
+          <button className="btn primary big" disabled={!story || !canFight} onClick={() => onFight(shown)}>
+            {!story ? '…' : canFight ? `${slotLabel(shown)}に ちょうせん！` : `${slotLabel(reach)}に勝つと、戦えます`}
           </button>
-          {next > 0 && (
-            <button className="btn ghost" onClick={() => onFight(0)}>
-              1体目から やり直す
+          {story && !cleared && reach > 0 && shown !== reach && (
+            <button className="btn ghost" onClick={() => setView(reach)}>
+              いちばん先の敵（{slotLabel(reach)}）をえらぶ
             </button>
           )}
           <div className="garage-note">
-            5体と続けて戦います。HP は毎回まんたんから。負けても、勝った分は残ります。ロボは1体ごとに 選べます。
+            敵をえらんで戦います。勝つと、次の敵に進めます。勝ったことのある敵（✓）とは、何度でも戦えます。HP は毎回まんたんから。ロボは1体ごとに 選べます。
           </div>
         </div>
       </div>
@@ -294,7 +300,7 @@ function StoryResult({
   if (!win.counted)
     return (
       <div className="story-result">
-        <div className="story-gain">この勝ちは 記録されませんでした（前の勝ちから時間が短すぎるか、順番がちがいます）。</div>
+        <div className="story-gain">この勝ちは 記録されませんでした（前の勝ちから時間が短すぎるか、まだ戦えない敵です）。</div>
         <div className="actions row">
           <button className="btn primary" onClick={() => onChapter(no)}>
             章の画面へ
