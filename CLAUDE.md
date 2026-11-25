@@ -41,7 +41,7 @@
 - **本番に出す手順**（`npm run deploy` でも同じ）：
   1. `npm run build`
   2. `npm run build:functions`（⚠️ 忘れると、サーバーに古いコードが出る）
-  3. `firebase deploy --only firestore:rules,functions,hosting --project pixel-battler-gemu --non-interactive`
+  3. `firebase deploy --only firestore:rules,firestore:indexes,functions,hosting --project pixel-battler-gemu --non-interactive`（索引＝`firestore.indexes.json` は 2026-11-25 から。ランキングが使う）
 - Secret Manager の中身を変えたら、**functions を出し直す**（出し直さないと効かない）
 - コミットの最後は `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
 - ⚠️ **bash に Python やスクリプトを直接書かない**（クォートや改行が化ける）。スクラッチにファイルとして書いてから走らせる

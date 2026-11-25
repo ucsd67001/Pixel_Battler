@@ -5,6 +5,7 @@ import path from 'node:path';
 import { analyzeImage, refreshText, type SpecCache } from './server/analyze';
 import { sanitizeSpec } from './src/game/spec';
 import { toRival } from './server/rival';
+import { buildRanking, type RawPlayer, type RawRobot } from './src/game/ranking';
 import { createHash } from 'node:crypto';
 
 // 鍵を探す：① .env の OPENAI_API_KEY ② .env の KEY_ENV_FILE が指す別のファイルの OPENAI_API_KEY
@@ -104,11 +105,48 @@ function apiPlugin(env: Record<string, string>): Plugin {
     send(res, 200, { robot: toRival({ seed, spec }) });
   };
 
+  // ランキングの画面を手元で試すため：取り置きの設計図から、見本のランキングを作って返す（数はでたらめ。本番は /api/ranking）
+  const ranking: Connect.NextHandleFunction = (req, res) => {
+    if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
+    const files = fs.existsSync(cacheDir) ? fs.readdirSync(cacheDir).filter((f) => f.endsWith('.json')).slice(0, 25) : [];
+    const names = ['ロボマスター', 'たろう☆', 'ねこパンチ', 'ほしぞら', 'Robo12', 'かぜのこ', 'はやて', 'ミライ'];
+    const players: RawPlayer[] = names.map((nickname, i) => ({
+      uid: i === 0 ? 'me' : `p${i}`,
+      nickname,
+      cpuWins: (i * 7) % 23,
+      roomWins: (i * 3) % 5,
+      cleared: (i * 5) % 9,
+      next: i % 4,
+      storyAt: i,
+    }));
+    players.push({ uid: 'nonick', nickname: '', cpuWins: 99, roomWins: 9, cleared: 9, next: 0, storyAt: 0 }); // ニックネームが無い人は出ない
+    const robots: RawRobot[] = [];
+    files.forEach((f, i) => {
+      const seed = createHash('sha256').update(f).digest('hex');
+      const shown = toRival({ seed, spec: JSON.parse(fs.readFileSync(path.join(cacheDir, f), 'utf8')) });
+      if (!shown) return;
+      robots.push({
+        uid: i % 4 === 0 ? 'me' : i % 3 === 0 ? 'nonick' : `p${(i % 7) + 1}`,
+        key: f,
+        name: shown.spec.name,
+        element: shown.spec.element,
+        rank: shown.rank,
+        level: 1 + ((i * 11) % 30),
+        exp: i,
+        cpuWins: (i * 5) % 17,
+        roomWins: (i * 2) % 6,
+        spec: shown.spec,
+      });
+    });
+    send(res, 200, buildRanking(players, robots, 'me'));
+  };
+
   const mount = (m: Connect.Server) => {
     m.use('/api/health', health);
     m.use('/api/analyze', analyze);
     m.use('/api/fix-text', fixText);
     m.use('/api/rival', rival);
+    m.use('/api/ranking', ranking);
   };
 
   return {

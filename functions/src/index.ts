@@ -4,7 +4,8 @@
 // ほかの人のロボを一体、コンピュータの敵として返す窓口（/api/rival）、
 // ストーリーで勝ったロボに経験値を足す窓口（/api/robots/win。2026-11-23 から。レベルと経験値を書くのはサーバーだけ）、
 // コンピュータと対戦・ふたりで対戦の戦績を数える窓口（/api/battle/start と /api/battle/end。2026-11-25 から。src/game/record.ts）、
-// ニックネームを決める窓口（/api/profile。2026-11-25 から。src/game/profile.ts）。
+// ニックネームを決める窓口（/api/profile。2026-11-25 から。src/game/profile.ts）、
+// ランキングを返す窓口（/api/ranking。2026-11-25 から。src/game/ranking.ts）。
 // Hosting の書き換え（firebase.json）で、同じドメインの /api/** がここに来る。
 // 写真から作れるのは、Google でログインした人だれでも（2026-11-22 から。それまでは家族だけ）。
 // 回数の上限：家族（ALLOWED_EMAILS）は一人一日30回、家族以外は一人一日10回、家族以外の全員を合わせて一日200回。
@@ -23,7 +24,9 @@ import { needsTextFix, specHardKanji, withFixedText } from '../../src/game/kanji
 import { isHash, sanitizeSpec } from '../../src/game/spec';
 import { afterWin, canWin, readStory } from '../../src/game/progress';
 import { DAILY_RECORDS, isMode, isResult, jstDay, MIN_BATTLE_MS, TICKET_LIFE_MS } from '../../src/game/record';
-import { checkNickname } from '../../src/game/profile';
+import { checkNickname, readNickname } from '../../src/game/profile';
+import { buildRanking, type RawPlayer, type RawRobot } from '../../src/game/ranking';
+import { readRecord } from '../../src/game/record';
 import type { Character, CharacterSpec } from '../../src/game/types';
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
@@ -57,6 +60,62 @@ async function rivalRefs() {
     rivalPool = { at: Date.now(), refs: snap.docs.map((d) => d.ref) };
   }
   return rivalPool.refs;
+}
+
+// ── ランキングのもとのデータ（2026-11-25。並べ方は src/game/ranking.ts） ──
+//   ・プレイヤー：ニックネームを決めた人（users の nickname）を全部読む（人数が少ないので）
+//   ・ロボ：みんなのガレージから、レベル・コンピュータの勝ち・ふたりで対戦の勝ちの多いロボを、それぞれ上から読む
+//     （robots のコレクショングループの並びの索引が要る。firestore.indexes.json）。写真（thumb）は読まない
+//   ・読む回数をへらすため、1分のあいだは同じものを使う（見る人ごとの「自分の行」は、毎回つけ直す）
+const RANKING_TTL = 60 * 1000;
+const ROBOT_FETCH = 60;
+let rankingRaw: { at: number; players: RawPlayer[]; robots: RawRobot[] } | null = null;
+async function loadRankingRaw() {
+  if (rankingRaw && Date.now() - rankingRaw.at < RANKING_TTL) return rankingRaw;
+  const users = await db.collection('users').where('nickname', '>', '').get();
+  const players: RawPlayer[] = users.docs.map((d) => {
+    const u = d.data();
+    const rec = readRecord(u.stats);
+    const story = readStory(u.story);
+    return {
+      uid: d.id,
+      nickname: readNickname(u.nickname),
+      cpuWins: rec.cpu.win,
+      roomWins: rec.room.win,
+      cleared: story.cleared,
+      next: story.run?.next ?? 0,
+      storyAt: Number(u.storyAt) || 0,
+    };
+  });
+  const fields = ['seed', 'spec', 'rank', 'level', 'exp', 'expV', 'record', 'stats'];
+  const top = (field: string) => db.collectionGroup('robots').orderBy(field, 'desc').limit(ROBOT_FETCH).select(...fields).get();
+  const snaps = await Promise.all([top('level'), top('record.cpu.win'), top('record.room.win')]);
+  const seen = new Set<string>();
+  const robots: RawRobot[] = [];
+  for (const d of snaps.flatMap((s) => s.docs)) {
+    if (seen.has(d.ref.path)) continue;
+    seen.add(d.ref.path);
+    const uid = d.ref.parent.parent?.id;
+    const data = d.data() as Character;
+    const shown = toRival(data); // 写真に写っていたもの・特別な写真のしるしを消した設計図（習わない漢字が残るロボは出さない）
+    if (!uid || !shown) continue;
+    const rec = readRecord(data.record);
+    const g = growthOf(expOf(data));
+    robots.push({
+      uid,
+      key: d.ref.path,
+      name: shown.spec.name,
+      element: shown.spec.element,
+      rank: shown.rank,
+      level: g.level,
+      exp: g.exp,
+      cpuWins: rec.cpu.win,
+      roomWins: rec.room.win,
+      spec: shown.spec,
+    });
+  }
+  rankingRaw = { at: Date.now(), players, robots };
+  return rankingRaw;
 }
 
 // ガレージのロボの文を、いまの決まりに合わせて書き直して、しまい直す（一体につき一度だけ。強さ・見た目は変えない）。
@@ -150,7 +209,8 @@ export const api = onRequest(
     const isStart = req.path.endsWith('/battle/start');
     const isEnd = req.path.endsWith('/battle/end');
     const isProfile = req.path.endsWith('/profile');
-    if (!isAnalyze && !isRobots && !isFix && !isGarage && !isRival && !isWin && !isStart && !isEnd && !isProfile) {
+    const isRanking = req.path.endsWith('/ranking');
+    if (!isAnalyze && !isRobots && !isFix && !isGarage && !isRival && !isWin && !isStart && !isEnd && !isProfile && !isRanking) {
       res.status(404).json({ error: 'not found' });
       return;
     }
@@ -241,6 +301,8 @@ export const api = onRequest(
               lastWin: { chapter: inp.chapter, slot: inp.slot },
               story: next,
               stats: { story: { win: FieldValue.increment(1) } }, // 戦績（2026-11-25 から数える）
+              // 進み具合が先へ進んだ時刻（ランキングで、同じ進みなら先に着いた人が上。2026-11-25 から）
+              ...(next.cleared !== story.cleared || next.run?.next !== story.run?.next ? { storyAt: now } : {}),
             },
             { merge: true },
           );
@@ -248,6 +310,23 @@ export const api = onRequest(
         });
         if (out === 'missing') res.status(404).json({ error: 'not found' });
         else res.json(out);
+      } catch (e) {
+        fail(e);
+      }
+      return;
+    }
+
+    // ── ランキング（プレイヤーとロボ、3つずつ）。自分のニックネームと順位もつける ──
+    if (isRanking) {
+      try {
+        const raw = await loadRankingRaw();
+        const data = buildRanking(raw.players, raw.robots, user.uid, raw.at);
+        // ニックネームを決めていない人の「自分のニックネーム」は空のまま（ランキングに出ていないことを、画面で伝える）
+        if (!data.me.nickname) {
+          const mine = await db.collection('users').doc(user.uid).get();
+          data.me.nickname = readNickname(mine.data()?.nickname);
+        }
+        res.json(data);
       } catch (e) {
         fail(e);
       }

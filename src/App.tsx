@@ -4,6 +4,7 @@ import type { Character } from './game/types';
 import { Title } from './ui/Title';
 import { About } from './ui/About';
 import { MyPage } from './ui/MyPage';
+import { Ranking } from './ui/Ranking';
 import { Create } from './ui/Create';
 import { Hangar } from './ui/Hangar';
 import { prefetchRival } from './game/rival';
@@ -21,6 +22,7 @@ type Screen =
   | { name: 'title' }
   | { name: 'about' } // ピクセル・バトラーって？（#about でも開く）
   | { name: 'mypage' } // マイページ（戦績・ロボ）
+  | { name: 'ranking' } // ランキング（プレイヤーとロボ）
   | { name: 'create' }
   | { name: 'hangar' }
   | { name: 'pick' } // コンピュータと対戦：戦うロボを選ぶ
@@ -106,6 +108,7 @@ export function App() {
         <Title
           onAbout={about}
           onMyPage={() => setScreen({ name: 'mypage' })}
+          onRanking={() => setScreen({ name: 'ranking' })}
           onCreate={() => setScreen({ name: 'create' })}
           onHangar={() => setScreen({ name: 'hangar' })}
           onPick={() => {
@@ -120,6 +123,8 @@ export function App() {
       return <About onBack={title} />;
     case 'mypage':
       return <MyPage onBack={title} />;
+    case 'ranking':
+      return <Ranking onBack={title} onMyPage={() => setScreen({ name: 'mypage' })} />;
     case 'create':
       return <Create onFight={fight} onBack={title} />;
     case 'hangar':

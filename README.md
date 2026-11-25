@@ -73,9 +73,9 @@ cd C:\Users\ucsd6\OneDrive\デスクトップ\pixelbattler; firebase functions:s
 | `vite.config.ts` | 開発サーバーに `/api/health`・`/api/analyze`・`/api/fix-text`・`/api/rival` を足している（鍵の読み込みもここ）。本番のファイルは、変わりにくい部品（3D・Firebase・React）を別のファイルに分ける |
 | `functions/src/index.ts` | Firebase の窓口（`/api/health`・`analyze`・`robots`・`robots/fix`・`robots/win`・`garage`・`rival`）。ログインと一日の回数を確かめてから、`server/` の決まりを呼ぶ |
 | `src/lib/` | `firebase.ts`＝Google ログイン、`api.ts`＝サーバーの窓口を呼ぶ（ログインの印を付ける `postApi`）、`sfx.ts`＝効果音 |
-| `src/game/` | ゲームの決まり（画面と切り離した計算）。`battle.ts`＝バトル、`stats.ts`＝数値、`data.ts`＝スキル・特性・属性の表、`level.ts`＝レベルと経験値、`story.ts`＝章の中身、`progress.ts`＝ストーリーの進み具合（サーバーも使う）、`minions.ts`＝手下36体、`thinkers.ts`＝10章から先の人物、`cpu.ts`＝コンピュータの敵と考え方、`garage.ts`＝ガレージ（と戦績の読み書き）、`record.ts`＝戦績の決まり、`profile.ts`＝ニックネームの決まり（どちらもサーバーも使う） |
+| `src/game/` | ゲームの決まり（画面と切り離した計算）。`battle.ts`＝バトル、`stats.ts`＝数値、`data.ts`＝スキル・特性・属性の表、`level.ts`＝レベルと経験値、`story.ts`＝章の中身、`progress.ts`＝ストーリーの進み具合（サーバーも使う）、`minions.ts`＝手下36体、`thinkers.ts`＝10章から先の人物、`cpu.ts`＝コンピュータの敵と考え方、`garage.ts`＝ガレージ（と戦績の読み書き）、`record.ts`＝戦績の決まり、`profile.ts`＝ニックネームの決まり、`ranking.ts`＝ランキングの並べ方（どれもサーバーも使う） |
 | `src/three/` | 3D。`robot.ts`＝部品を組むロボとポーズ、`stage.ts`＝バトル場と演出、`effects.ts`＝光・ビーム・斬撃 |
-| `src/ui/` | 画面（タイトル・あそびかた・マイページ・作成・ガレージ・ストーリー・バトル・部屋） |
+| `src/ui/` | 画面（タイトル・あそびかた・マイページ・ランキング・作成・ガレージ・ストーリー・バトル・部屋） |
 | `scripts/` | `sim.ts`＝釣り合いの確かめ（`npm run sim`）、`tune-minions.ts`＝手下の強さ合わせ（`npm run tune:minions`）、`battle-lib.ts`＝その二つの共通の部品、`check-kanji.mjs`＝習わない漢字の点検 |
 
 ### 決めたこと

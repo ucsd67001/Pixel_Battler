@@ -37,6 +37,7 @@ function roomLabel(s: RoomState | null) {
 export function Title({
   onAbout,
   onMyPage,
+  onRanking,
   onCreate,
   onHangar,
   onPick,
@@ -45,6 +46,7 @@ export function Title({
 }: {
   onAbout: () => void; // ピクセル・バトラーって？（ログインなしでも見られる）
   onMyPage: () => void; // マイページ（ログインしてから）
+  onRanking: () => void; // ランキング（ログインしてから）
   onCreate: () => void;
   onHangar: () => void;
   onPick: () => void; // コンピュータと対戦（戦うロボを選ぶ画面へ）
@@ -65,7 +67,7 @@ export function Title({
   const needLogin = !!ai?.auth && user === null;
   const checking = ai === null || (!!ai.auth && user === undefined);
   const [loginError, setLoginError] = useState('');
-  // 小さめのボタンの列（あとで ランキング もここに並べる）。マイページは、遊べるとき（ログインしてから）だけ
+  // 小さめのボタンの列。マイページとランキングは、遊べるとき（ログインしてから）だけ
   const sub = (
     <div className="menu-sub">
       <button className="btn ghost small" onClick={onAbout}>
@@ -74,6 +76,11 @@ export function Title({
       {!needLogin && (
         <button className="btn ghost small" onClick={onMyPage}>
           マイページ
+        </button>
+      )}
+      {!needLogin && (
+        <button className="btn ghost small" onClick={onRanking}>
+          ランキング
         </button>
       )}
     </div>
