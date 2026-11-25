@@ -3,7 +3,8 @@
 // その人のガレージの上限を教える窓口（/api/garage）、ガレージのロボの文を直す窓口（/api/robots/fix。素手で戦う文に・習わない漢字を取りのぞく）、
 // ほかの人のロボを一体、コンピュータの敵として返す窓口（/api/rival）、
 // ストーリーで勝ったロボに経験値を足す窓口（/api/robots/win。2026-11-23 から。レベルと経験値を書くのはサーバーだけ）、
-// コンピュータと対戦・ふたりで対戦の戦績を数える窓口（/api/battle/start と /api/battle/end。2026-11-25 から。src/game/record.ts）。
+// コンピュータと対戦・ふたりで対戦の戦績を数える窓口（/api/battle/start と /api/battle/end。2026-11-25 から。src/game/record.ts）、
+// ニックネームを決める窓口（/api/profile。2026-11-25 から。src/game/profile.ts）。
 // Hosting の書き換え（firebase.json）で、同じドメインの /api/** がここに来る。
 // 写真から作れるのは、Google でログインした人だれでも（2026-11-22 から。それまでは家族だけ）。
 // 回数の上限：家族（ALLOWED_EMAILS）は一人一日30回、家族以外は一人一日10回、家族以外の全員を合わせて一日200回。
@@ -22,6 +23,7 @@ import { needsTextFix, specHardKanji, withFixedText } from '../../src/game/kanji
 import { isHash, sanitizeSpec } from '../../src/game/spec';
 import { afterWin, canWin, readStory } from '../../src/game/progress';
 import { DAILY_RECORDS, isMode, isResult, jstDay, MIN_BATTLE_MS, TICKET_LIFE_MS } from '../../src/game/record';
+import { checkNickname } from '../../src/game/profile';
 import type { Character, CharacterSpec } from '../../src/game/types';
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
@@ -147,7 +149,8 @@ export const api = onRequest(
     const isWin = req.path.endsWith('/robots/win');
     const isStart = req.path.endsWith('/battle/start');
     const isEnd = req.path.endsWith('/battle/end');
-    if (!isAnalyze && !isRobots && !isFix && !isGarage && !isRival && !isWin && !isStart && !isEnd) {
+    const isProfile = req.path.endsWith('/profile');
+    if (!isAnalyze && !isRobots && !isFix && !isGarage && !isRival && !isWin && !isStart && !isEnd && !isProfile) {
       res.status(404).json({ error: 'not found' });
       return;
     }
@@ -245,6 +248,25 @@ export const api = onRequest(
         });
         if (out === 'missing') res.status(404).json({ error: 'not found' });
         else res.json(out);
+      } catch (e) {
+        fail(e);
+      }
+      return;
+    }
+
+    // ── ニックネームを決める・変える（空にすると消す）。確かめ方は src/game/profile.ts ──
+    if (isProfile) {
+      try {
+        const r = checkNickname(body?.nickname);
+        if (!r.ok) {
+          res.status(400).json({ error: 'bad nickname', reason: r.reason });
+          return;
+        }
+        await db
+          .collection('users')
+          .doc(user.uid)
+          .set({ nickname: r.nickname || FieldValue.delete(), nicknameAt: Date.now() }, { merge: true });
+        res.json({ nickname: r.nickname });
       } catch (e) {
         fail(e);
       }

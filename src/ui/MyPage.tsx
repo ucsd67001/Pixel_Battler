@@ -1,9 +1,11 @@
 // マイページ：自分の戦績・ストーリーの進み・ロボごとの戦績（2026-11-25）。
 // 戦績は src/game/record.ts（数えはじめたのは 2026-11-25 から。それより前の勝ち負けは残っていない）。
 // 見られるのは本人だけ（Google の名前もここだけに出す。ランキングには出さない）。
+// ニックネームを決める・変えるのも、ここ（2026-11-25）。
 
-import type { CSSProperties } from 'react';
-import { useGarage, useStats, useStory } from '../game/garage';
+import { useState, type CSSProperties } from 'react';
+import { NicknameError, useGarage, useNickname, useStats, useStory } from '../game/garage';
+import { NICK_MAX } from '../game/profile';
 import { CHAPTERS } from '../game/story';
 import { BOSS_SLOT } from '../game/progress';
 import { levelOf } from '../game/level';
@@ -32,6 +34,81 @@ function WinLoseBox({ title, w }: { title: string; w: WinLose }) {
 
 const robotWins = (c: Character) => totalWins(readRecord(c.record));
 
+/** ニックネーム：決める・変える（2026-11-25。決まりは src/game/profile.ts） */
+function NicknameBox({ googleName }: { googleName: string }) {
+  const { nickname, save } = useNickname();
+  const [edit, setEdit] = useState(false);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const open = () => {
+    setText(nickname ?? '');
+    setErr('');
+    setEdit(true);
+  };
+  const submit = async () => {
+    setBusy(true);
+    setErr('');
+    try {
+      await save(text);
+      setEdit(false);
+    } catch (e) {
+      setErr(e instanceof NicknameError ? e.message : '保存できませんでした。電波のよいところで、もう一度ためしてね');
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (edit)
+    return (
+      <div className="my-name">
+        <form
+          className="nick-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+        >
+          <input
+            className="nick-input"
+            value={text}
+            maxLength={NICK_MAX + 5}
+            placeholder="ニックネーム"
+            autoFocus
+            onChange={(e) => setText(e.target.value)}
+          />
+          <button className="btn primary small" type="submit" disabled={busy}>
+            {busy ? '…' : 'きめる'}
+          </button>
+          <button className="btn ghost small" type="button" disabled={busy} onClick={() => setEdit(false)}>
+            やめる
+          </button>
+        </form>
+        {err && <div className="error">{err}</div>}
+        <small>
+          {NICK_MAX}文字まで。<b>本名や、学校・住所が分かる名前は入れないでね。</b>空にして「きめる」と、ニックネームを消せます。
+        </small>
+      </div>
+    );
+  return (
+    <div className="my-name">
+      <b>{nickname === null ? '…' : nickname || googleName || 'プレイヤー'}</b>
+      {nickname === null ? null : nickname ? (
+        <small>ニックネーム。これから作るランキングには、この名前が出ます。</small>
+      ) : (
+        <small>
+          {googleName ? 'いまは Google の名前です（自分にしか見えません）。' : 'まだ ニックネームがありません。'}
+          ニックネームを決めると、これから作るランキングに出られます。
+        </small>
+      )}
+      {nickname !== null && (
+        <button className="btn ghost small nick-edit" onClick={open}>
+          {nickname ? 'ニックネームを変える' : 'ニックネームを決める'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function MyPage({ onBack }: { onBack: () => void }) {
   const user = useUser();
   const garage = useGarage();
@@ -50,10 +127,7 @@ export function MyPage({ onBack }: { onBack: () => void }) {
         <span className="bar-title">MY PAGE</span>
       </header>
       <div className="page">
-        <div className="my-name">
-          <b>{user?.displayName ?? 'プレイヤー'}</b>
-          <small>この名前は、自分にしか見えません。</small>
-        </div>
+        <NicknameBox googleName={user?.displayName ?? ''} />
 
         <section className="page-sec">
           <h2>

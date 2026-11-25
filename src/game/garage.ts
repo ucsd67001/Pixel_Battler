@@ -13,6 +13,7 @@ import { needsTextFix, withFixedText } from './kanji';
 import { sanitizeSpec } from './spec';
 import { addWin, EXP_VERSION, expOf, growthOf } from './level';
 import { afterWin, canWin, EMPTY_STORY, readStory, type StoryProgress } from './progress';
+import { checkNickname, readNickname } from './profile';
 import { addResult, EMPTY_RECORD, MIN_BATTLE_MS, readRecord, type BattleRecord, type BattleResult, type RecordMode } from './record';
 import { currentUser, firestore, useUser } from '../lib/firebase';
 import { postApi } from '../lib/api';
@@ -212,6 +213,68 @@ export function useStats(): BattleRecord | null {
   }, [uid, db]);
   if (uid) return cloud;
   return user === undefined && CLOUD ? null : local;
+}
+
+// ── ニックネーム（2026-11-25。src/game/profile.ts） ──
+//   ・クラウド：Firestore の users/{uid} の nickname（書くのはサーバーだけ。/api/profile）
+//   ・手元・ログインしていないとき：このスマホの中
+const NICK_KEY = 'pb.nick.v1';
+const nickWatchers = new Set<() => void>();
+const loadLocalNick = () => {
+  try {
+    return readNickname(localStorage.getItem(NICK_KEY));
+  } catch {
+    return '';
+  }
+};
+
+/** ニックネームの答え（もらえなかったときは、理由つきで失敗にする） */
+export class NicknameError extends Error {}
+
+/** 自分のニックネーム（読みこみ中は null。決めていなければ ''）と、決める・変える（空で消す） */
+export function useNickname(): { nickname: string | null; save(n: string): Promise<string> } {
+  const user = useUser();
+  const db = firestore();
+  const uid = CLOUD && db && user ? user.uid : null;
+  const [local, setLocal] = useState(loadLocalNick);
+  const [cloud, setCloud] = useState<string | null>(null);
+  useEffect(() => {
+    const f = () => setLocal(loadLocalNick());
+    nickWatchers.add(f);
+    return () => void nickWatchers.delete(f);
+  }, []);
+  useEffect(() => {
+    setCloud(null);
+    if (!uid || !db) return;
+    return onSnapshot(
+      doc(db, 'users', uid),
+      (s) => setCloud(readNickname(s.data()?.nickname)),
+      (e) => {
+        console.warn('[nickname]', e);
+        setCloud('');
+      },
+    );
+  }, [uid, db]);
+  const save = async (n: string): Promise<string> => {
+    const r = checkNickname(n);
+    if (!r.ok) throw new NicknameError(r.reason);
+    if (uid) {
+      const res = await postApi('/api/profile', { nickname: r.nickname }, { needLogin: true });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new NicknameError(body?.reason ?? `保存できませんでした（HTTP ${res.status}）`);
+      return String(body.nickname ?? ''); // 一覧は onSnapshot で新しくなる
+    }
+    try {
+      if (r.nickname) localStorage.setItem(NICK_KEY, r.nickname);
+      else localStorage.removeItem(NICK_KEY);
+    } catch {
+      // 入れられなくても、遊ぶのは続けられる
+    }
+    nickWatchers.forEach((f) => f());
+    return r.nickname;
+  };
+  const nickname = uid ? cloud : user === undefined && CLOUD ? null : local;
+  return { nickname, save };
 }
 
 /** バトルの整理券（クラウドではサーバーが出す番号。手元では、始めた時刻だけ） */

@@ -2056,3 +2056,39 @@ button {
   color: #b9cbea;
   line-height: 1.5;
 }
+.my-name {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.my-name small b {
+  display: inline;
+  font-size: inherit;
+  color: var(--gold);
+}
+.nick-edit {
+  margin-top: 2px;
+}
+.nick-form {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+}
+.nick-input {
+  flex: 1 1 160px;
+  max-width: 260px;
+  min-width: 0;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 16px; /* 16px より小さいと、iPhone で画面が大きくなってしまう */
+  color: var(--text);
+  background: rgba(10, 20, 40, 0.8);
+  border: 1px solid var(--panel-line);
+  outline: none;
+}
+.nick-input:focus {
+  border-color: var(--cyan);
+}
