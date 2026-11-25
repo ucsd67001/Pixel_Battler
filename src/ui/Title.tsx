@@ -35,12 +35,14 @@ function roomLabel(s: RoomState | null) {
 }
 
 export function Title({
+  onAbout,
   onCreate,
   onHangar,
   onPick,
   onRoom,
   onStory,
 }: {
+  onAbout: () => void; // ピクセル・バトラーって？（ログインなしでも見られる）
   onCreate: () => void;
   onHangar: () => void;
   onPick: () => void; // コンピュータと対戦（戦うロボを選ぶ画面へ）
@@ -61,6 +63,14 @@ export function Title({
   const needLogin = !!ai?.auth && user === null;
   const checking = ai === null || (!!ai.auth && user === undefined);
   const [loginError, setLoginError] = useState('');
+  // 小さめのボタンの列（あとで マイページ・ランキング もここに並べる）
+  const sub = (
+    <div className="menu-sub">
+      <button className="btn ghost small" onClick={onAbout}>
+        あそびかた
+      </button>
+    </div>
+  );
   return (
     <div className="screen title-screen">
       <Showcase spec={(latest ?? CPU_CHARACTER).spec} className="stage stage-bg" />
@@ -92,6 +102,7 @@ export function Title({
             </button>
             <div className="login-note">Google でログインすると、遊べます。</div>
             {loginError && <div className="error">{loginError}</div>}
+            {sub}
           </div>
         ) : (
         <div className="menu">
@@ -118,6 +129,7 @@ export function Title({
               ガレージ（{hangar.length}体）
             </button>
           )}
+          {sub}
           {user && (
             <button className="btn ghost small" onClick={() => logout()}>
               {user.displayName ?? user.email} ・ ログアウト

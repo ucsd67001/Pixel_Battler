@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { isMuted, setMuted, sfx, unlockAudio } from './lib/sfx';
 import type { Character } from './game/types';
 import { Title } from './ui/Title';
+import { About } from './ui/About';
 import { Create } from './ui/Create';
 import { Hangar } from './ui/Hangar';
 import { prefetchRival } from './game/rival';
@@ -17,6 +18,7 @@ const Showroom = lazy(() => import('./ui/Showroom').then((m) => ({ default: m.Sh
 
 type Screen =
   | { name: 'title' }
+  | { name: 'about' } // ピクセル・バトラーって？（#about でも開く）
   | { name: 'create' }
   | { name: 'hangar' }
   | { name: 'pick' } // コンピュータと対戦：戦うロボを選ぶ
@@ -29,9 +31,17 @@ type Screen =
   | { name: 'storybattle'; no: number; slot: number; seed: string; key: number };
 
 export function App() {
-  const [screen, setScreen] = useState<Screen>({ name: 'title' });
+  // あそびかたのページは、URL の #about でも開ける（友達やおうちの人に、そのページを教えられるように）
+  const [screen, setScreen] = useState<Screen>(() => (location.hash === '#about' ? { name: 'about' } : { name: 'title' }));
   const fight = (char: Character) => setScreen({ name: 'battle', char, key: Date.now() });
-  const title = () => setScreen({ name: 'title' });
+  const title = () => {
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+    setScreen({ name: 'title' });
+  };
+  const about = () => {
+    history.replaceState(null, '', `${location.pathname}${location.search}#about`);
+    setScreen({ name: 'about' });
+  };
   const [muted, setMutedState] = useState(isMuted());
 
   // ふたりで対戦の部屋（部屋の画面とバトルの画面をまたいで、入ったままにする）
@@ -92,6 +102,7 @@ export function App() {
     case 'title':
       return (
         <Title
+          onAbout={about}
           onCreate={() => setScreen({ name: 'create' })}
           onHangar={() => setScreen({ name: 'hangar' })}
           onPick={() => {
@@ -102,6 +113,8 @@ export function App() {
           onStory={() => setScreen({ name: 'story' })}
         />
       );
+    case 'about':
+      return <About onBack={title} />;
     case 'create':
       return <Create onFight={fight} onBack={title} />;
     case 'hangar':
