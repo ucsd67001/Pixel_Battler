@@ -7,6 +7,7 @@ import type { Character } from '../game/types';
 import { useGarage } from '../game/garage';
 import { useItemBox } from '../game/itemBox';
 import { ELEMENT_INFO } from '../game/data';
+import { RosterTools, useRosterView } from './RobotRoster';
 import { login, useUser } from '../lib/firebase';
 import { isLocalRoom, makeNetBattle, openRoomLink, RoomSession, type NetBattle, type RoomPlayer, type RoomState } from '../net/room';
 
@@ -55,6 +56,7 @@ export function Room({
   const [status, setStatus] = useState<Status>(session ? 'ready' : 'loading');
   const [state, setState] = useState<RoomState>(session?.state ?? { players: [], battle: null });
   const hangar = useGarage().list;
+  const view = useRosterView(hangar);
   const box = useItemBox();
   const [pick, setPick] = useState<Character | null>(null);
   const [choosing, setChoosing] = useState(false);
@@ -94,7 +96,9 @@ export function Room({
   const others = session ? state.players.filter((p) => p.uid !== session.me) : [];
   const full = !me && others.length >= 2;
   const joined = !!me;
-  const chosen = pick ?? me?.char ?? hangar[0] ?? null;
+  // 選べるのは、いま並んでいる（しぼりこみで消えていない）ロボだけ
+  const shown = (c?: Character | null) => (c && view.shown.some((x) => x.id === c.id) ? c : undefined);
+  const chosen = shown(pick) ?? shown(me?.char) ?? view.shown[0] ?? null;
 
   const enter = async () => {
     if (!session || !chosen) return;
@@ -178,8 +182,9 @@ export function Room({
                   <div className="empty">先に「写真から作る」で、ロボを作ってください。</div>
                 ) : (
                   <>
+                    <RosterTools view={view} total={hangar.length} />
                     <div className="roster">
-                      {hangar.map((c) => (
+                      {view.shown.map((c) => (
                         <button
                           key={c.id}
                           className={`roster-item${chosen?.id === c.id ? ' on' : ''}`}

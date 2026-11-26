@@ -7,6 +7,7 @@ import { CharacterCard } from './CharacterCard';
 import { Showcase } from './StageView';
 import { useItemBox } from '../game/itemBox';
 import { ItemSlot } from './ItemSlot';
+import { RosterTools, useRosterView } from './RobotRoster';
 
 // ガレージの画面。pick のときは「コンピュータと対戦」の、戦うロボを選ぶ画面として使う（消すボタンは出さない）
 export function Hangar({
@@ -28,8 +29,9 @@ export function Hangar({
   const box = useItemBox();
   if (import.meta.env.DEV) (window as any).__garage = garage; // 試すときに経験値を足すため（開発中だけ）
   const list = garage.list;
+  const view = useRosterView(list);
   const [selSeed, setSelSeed] = useState<string | null>(null);
-  const sel = list.find((c) => c.seed === selSeed) ?? list[0] ?? null;
+  const sel = view.shown.find((c) => c.seed === selSeed) ?? view.shown[0] ?? null;
   const setSel = (c: Character) => setSelSeed(c.seed);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -84,22 +86,26 @@ export function Hangar({
         <div className="split">
           <div className="split-stage">
             {sel && <Showcase spec={sel.spec} item={sel.itemSeed ? box.find(sel.itemSeed)?.spec : undefined} className="stage" />}
-            <div className="roster">
-              {list.map((c) => (
-                <button
-                  key={c.seed}
-                  className={`roster-item${sel?.seed === c.seed ? ' on' : ''}`}
-                  style={{ '--el': ELEMENT_INFO[c.spec.element].color } as CSSProperties}
-                  onClick={() => setSel(c)}
-                >
-                  {c.thumb ? <img src={c.thumb} alt="" /> : <span className="noimg" />}
-                  <span className="roster-name">
-                    {c.spec.name}
-                    <small>Lv{levelOf(c)}</small>
-                  </span>
-                  <span className={`rank mini rank-${c.rank}`}>{c.rank}</span>
-                </button>
-              ))}
+            <div className="roster-dock">
+              <RosterTools view={view} total={list.length} />
+              {/* key：並べかえ・しぼりこみを変えたら、列を左はしにもどす */}
+              <div className="roster" key={`${view.sort}-${view.filter}`}>
+                {view.shown.map((c) => (
+                  <button
+                    key={c.seed}
+                    className={`roster-item${sel?.seed === c.seed ? ' on' : ''}`}
+                    style={{ '--el': ELEMENT_INFO[c.spec.element].color } as CSSProperties}
+                    onClick={() => setSel(c)}
+                  >
+                    {c.thumb ? <img src={c.thumb} alt="" /> : <span className="noimg" />}
+                    <span className="roster-name">
+                      {c.spec.name}
+                      <small>Lv{levelOf(c)}</small>
+                    </span>
+                    <span className={`rank mini rank-${c.rank}`}>{c.rank}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           {sel && (
