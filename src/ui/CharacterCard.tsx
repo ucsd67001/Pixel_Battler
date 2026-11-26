@@ -3,11 +3,26 @@ import type { Character } from '../game/types';
 import { ELEMENT_INFO, FORM_INFO, SKILL_TABLE, TRAIT_TABLE, ULT_TABLE } from '../game/data';
 import { STAT_RANGE } from '../game/stats';
 import { elementTip, GLOSSARY, traitTip, type Tip } from '../game/glossary';
-import { expOf, growthOf } from '../game/level';
+import { atLevel, expOf, growthOf, levelMult } from '../game/level';
 import { Term } from './Term';
 
-function StatBar({ label, tip, value, range }: { label: string; tip: Tip; value: number; range: { min: number; max: number } }) {
-  const pct = Math.max(6, Math.min(100, ((value - range.min * 0.6) / (range.max - range.min * 0.6)) * 100));
+// plus：レベルで増えた分（ストーリーのバトルだけで効く）。バーの先に うすい色でつなげ、右に「+49」と出す
+function StatBar({
+  label,
+  tip,
+  value,
+  range,
+  plus,
+}: {
+  label: string;
+  tip: Tip;
+  value: number;
+  range: { min: number; max: number };
+  plus?: number;
+}) {
+  const pctOf = (v: number) => Math.max(6, Math.min(100, ((v - range.min * 0.6) / (range.max - range.min * 0.6)) * 100));
+  const pct = pctOf(value);
+  const more = plus ? pctOf(value + plus) - pct : 0;
   return (
     <div className="stat">
       <span className="stat-label">
@@ -15,8 +30,10 @@ function StatBar({ label, tip, value, range }: { label: string; tip: Tip; value:
       </span>
       <span className="stat-bar">
         <span style={{ width: `${pct}%` }} />
+        {more > 0 && <span className="stat-more" style={{ width: `${more}%` }} />}
       </span>
       <span className="stat-value">{value}</span>
+      {plus !== undefined && <span className="stat-plus">{plus > 0 ? `+${plus}` : ''}</span>}
     </div>
   );
 }
@@ -30,6 +47,10 @@ export function CharacterCard({ c, compact }: { c: Character; compact?: boolean 
   // レベルは、ガレージのロボ（写真から作ったロボ）だけに出す。コンピュータの敵・だれかのロボには出さない
   const mine = c.source === 'ai' || c.source === 'local';
   const g = growthOf(expOf(c));
+  // ストーリーのバトルで、レベルの分だけ増える数字（2026-11-26。「レベルが上がったのに数字が同じ」と言われたため）。
+  // カードの数字は、対戦で使う Lv1 の数字のまま。バトルの中の姿（fightLevel のあるロボ）は、もう増えているので出さない
+  const grown = mine && g.level > 1 && !c.fightLevel ? atLevel(c, g.level).stats : null;
+  const plus = (k: keyof Character['stats']) => (grown ? grown[k] - c.stats[k] : undefined);
   return (
     <div className={`card${compact ? ' compact' : ''}`} style={style}>
       <div className="card-head">
@@ -72,12 +93,18 @@ export function CharacterCard({ c, compact }: { c: Character; compact?: boolean 
           <span className="growth-next">{g.need ? `経験値 あと${g.left}で Lv${g.level + 1}` : 'いちばん上のレベル'}</span>
         </div>
       )}
-      <div className="stats">
-        <StatBar label="HP" tip={GLOSSARY.hp} value={c.stats.hp} range={STAT_RANGE.hp} />
-        <StatBar label="SP" tip={GLOSSARY.sp} value={c.stats.sp} range={STAT_RANGE.sp} />
-        <StatBar label="こうげき" tip={GLOSSARY.atk} value={c.stats.atk} range={STAT_RANGE.atk} />
-        <StatBar label="ぼうぎょ" tip={GLOSSARY.def} value={c.stats.def} range={STAT_RANGE.def} />
+      <div className={`stats${grown ? ' grown' : ''}`}>
+        <StatBar label="HP" tip={GLOSSARY.hp} value={c.stats.hp} range={STAT_RANGE.hp} plus={plus('hp')} />
+        <StatBar label="SP" tip={GLOSSARY.sp} value={c.stats.sp} range={STAT_RANGE.sp} plus={plus('sp')} />
+        <StatBar label="こうげき" tip={GLOSSARY.atk} value={c.stats.atk} range={STAT_RANGE.atk} plus={plus('atk')} />
+        <StatBar label="ぼうぎょ" tip={GLOSSARY.def} value={c.stats.def} range={STAT_RANGE.def} plus={plus('def')} />
       </div>
+      {grown && (
+        <div className="stats-note">
+          <b>+</b> は、ストーリーのバトルで Lv{g.level} の分 強くなる数字（Lv1 より {Math.round((levelMult(g.level) - 1) * 100)}%
+          アップ）。コンピュータと対戦・ふたりで対戦は、左の数字で戦う
+        </div>
+      )}
       {!compact && (
         <div className="abilities">
           <div className="ability">
