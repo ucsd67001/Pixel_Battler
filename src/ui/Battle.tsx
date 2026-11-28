@@ -12,7 +12,7 @@ import type { Stage } from '../three/stage';
 import { StageView } from './StageView';
 import { Term } from './Term';
 import { elementTip, GLOSSARY } from '../game/glossary';
-import { playBgm, sfx, stopBgm } from '../lib/sfx';
+import { playBgm, sfx, stopBgm, type BgmName } from '../lib/sfx';
 import { mulberry32 } from '../game/random';
 import type { NetBattle } from '../net/room';
 import { endRecord, startRecord, type BattleTicket } from '../game/garage';
@@ -149,6 +149,7 @@ export function Battle({
   intro,
   resultPanel,
   record,
+  bgm = 'battle',
 }: {
   player: Character;
   onExit: () => void;
@@ -163,6 +164,8 @@ export function Battle({
   resultPanel?: (result: 'win' | 'lose' | 'draw') => ReactNode;
   /** 戦績に数えるとき：コンピュータと対戦（cpu）・ふたりで対戦（room）。ストーリーは /api/robots/win が数えるので付けない */
   record?: RecordMode;
+  /** 流す曲（無ければ、いつものバトルの曲） */
+  bgm?: BgmName;
 }) {
   // コンピュータと対戦の敵は、コンピュータの9体か、ほかの人のロボ（みんなのロボ。動かすのはコンピュータ）
   const [enemy] = useState(() => net?.opponent ?? fixedEnemy ?? pickEnemy());
@@ -197,7 +200,7 @@ export function Battle({
 
   useEffect(() => {
     alive.current = true;
-    playBgm(); // バトルの曲を、頭からくり返し流す
+    playBgm(bgm); // バトルの曲を、頭からくり返し流す
     return () => {
       alive.current = false;
       stopBgm(0.4);

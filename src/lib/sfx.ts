@@ -141,9 +141,16 @@ export function setMuted(v: boolean) {
 // iPhone の Safari では、ふつうのやり方だと音の大きさを変えられないので、効果音と同じ通り道（Web Audio）に流す。
 // スマホは、人が画面を触っているあいだに一度鳴らしておかないと、あとから鳴らせない。
 // だから、最初のタッチで音を0にしたまま一度鳴らして止めておく（bgmSetup）。
-const BGM_SRC = '/bgm/battle.mp3';
+// 曲はどれも持ち主の自作。battle＝いつものバトル。ストーリーの10章から先は、手下が explore・ボスが trial（2026-11-28、持ち主の希望）
+export type BgmName = 'battle' | 'explore' | 'trial';
+const BGM_SRC: Record<BgmName, string> = {
+  battle: '/bgm/battle.mp3',
+  explore: '/bgm/explore.mp3',
+  trial: '/bgm/trial.mp3',
+};
 const BGM_VOL = 0.3;
 let bgmEl: HTMLAudioElement | null = null;
+let bgmName: BgmName = 'battle'; // いま bgmEl に入っている曲
 let bgmGain: GainNode | null = null;
 let bgmWant = false;
 let bgmDuck = 1;
@@ -152,7 +159,7 @@ let bgmDuckTimer = 0;
 
 function bgmSetup(b: Bus) {
   if (bgmEl) return;
-  const el = new Audio(BGM_SRC);
+  const el = new Audio(BGM_SRC[bgmName]);
   el.loop = true;
   el.preload = 'auto';
   bgmEl = el;
@@ -182,15 +189,21 @@ function bgmLevel(level: number, tc: number) {
   else if (bgmEl) bgmEl.volume = Math.min(1, v);
 }
 
-/** バトルの曲を、頭からくり返し流す */
-export function playBgm() {
+/** バトルの曲を、頭からくり返し流す（name：どの曲か） */
+export function playBgm(name: BgmName = 'battle') {
   try {
     bgmWant = true;
     clearTimeout(bgmStopTimer);
     const b = bus();
     if (!b) return;
+    if (!bgmEl) bgmName = name; // まだ入れ物が無ければ、はじめからこの曲で作る
     bgmSetup(b);
     if (!bgmEl) return;
+    // 曲を入れかえるときも、同じ bgmEl を使う（スマホで一度鳴らしてある入れ物なので、あとから鳴らせる）
+    if (name !== bgmName) {
+      bgmName = name;
+      bgmEl.src = BGM_SRC[name];
+    }
     bgmEl.currentTime = 0;
     bgmEl.play().catch(() => {});
     bgmLevel(1, 0.15);

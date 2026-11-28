@@ -28,6 +28,9 @@ const BOSS_RANK: Rank = 'A';
 
 const b = (hp: number, sp: number, atk: number, def: number) => ({ hp, sp, atk, def });
 
+/** 人物の章の、最初の章 */
+export const FIRST_PERSON_CHAPTER = 10;
+
 // 10章から順に
 export const PERSON_CHAPTERS: PersonChapter[] = [
   // ── 10章 ミレトスの港：港町ミレトスの3人と、ピタゴラス・クセノパネス（この2人は、のちに港から西へ船出した） ──
@@ -307,4 +310,4 @@ export function person(chapter: number, slot: number, d: PersonDef, power = d.po
 }
 
 /** 10章から先の、章ごとの5人（戦える形） */
-export const PERSON_ENEMIES: Character[][] = PERSON_CHAPTERS.map((ch, i) => ch.people.map((d, slot) => person(10 + i, slot, d)));
+export const PERSON_ENEMIES: Character[][] = PERSON_CHAPTERS.map((ch, i) => ch.people.map((d, slot) => person(FIRST_PERSON_CHAPTER + i, slot, d)));

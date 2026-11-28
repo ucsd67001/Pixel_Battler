@@ -11,10 +11,16 @@ import {
   BOSS_SLOT, CHAPTER_SIZE, CHAPTERS, chapterElements, chapterLevel, chapterOf, enemyAt, isOpen, nextSlot, reachOf,
   type StoryProgress,
 } from '../game/story';
+import { FIRST_PERSON_CHAPTER } from '../game/thinkers';
+import type { BgmName } from '../lib/sfx';
 import { atLevel, BOSS_EXP_RATE, EXP_PER_WIN, levelOf } from '../game/level';
 import { ELEMENT_INFO, strongAgainst } from '../game/data';
 import { Showcase } from './StageView';
 import { Battle } from './Battle';
+
+// ストーリーの曲：人物の章（10章から先）は、手下が「探索クエスト」・ボスが「試練クエスト」（2026-11-28、持ち主の希望）。9章まではいつもの曲
+const storyBgm = (no: number, slot: number): BgmName =>
+  no < FIRST_PERSON_CHAPTER ? 'battle' : slot === BOSS_SLOT ? 'trial' : 'explore';
 
 /** 属性の小さな札（色つき） */
 function ElementChips({ list }: { list: Element[] }) {
@@ -217,6 +223,7 @@ export function StoryBattle({
       player={fight.player}
       enemy={fight.enemy}
       intro={fight.intro}
+      bgm={storyBgm(no, slot)}
       onExit={() => onChapter(no)}
       onRematch={() => onNext(slot, seed)}
       resultPanel={(r) => (
